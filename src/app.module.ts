@@ -1,14 +1,17 @@
-import { categoryModule } from './Categorys/categorys.module';
+import { categoriaModule } from './Categoria/categoria.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UsersModule } from './users/users.module';
-import { CardsModule } from './cards/cards.module';
-import { CardsService } from './Cards/cards.service';
-import { ExpensesModule } from './expenses/expenses.module';
+import { UsersModule } from './Usuario/users.module';
+import { TarjetaCreditoModule } from './TarjetaCredito/tarjeta-credito.module';
+import { TarjetaCreditoService } from './TarjetaCredito/tarjeta-credito.service';
+import { GastoModule } from './Gasto/gasto.module';
 import { AuthModule } from './auth/auth.module';
 import { classes } from '@automapper/classes';
 import { AutomapperModule } from '@automapper/nestjs';
+import { CuotaModule } from './cuota/cuota.module';
+import { BancoModule } from './banco/banco.module';
+import { TarjetaDebitoModule } from './tarjeta-debito/tarjeta-debito.module';
 
 @Module({
   imports: [
@@ -35,11 +38,14 @@ import { AutomapperModule } from '@automapper/nestjs';
       strategyInitializer: classes(),
     }),
     UsersModule,
-    CardsModule,
-    categoryModule,
-    ExpensesModule,
+    TarjetaCreditoModule,
+    categoriaModule,
+    GastoModule,
     AuthModule,
+    CuotaModule,
+    BancoModule,
+    TarjetaDebitoModule,
   ],
-  providers: [CardsService],
+  providers: [TarjetaCreditoService],
 })
 export class AppModule {}
