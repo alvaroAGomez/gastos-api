@@ -1,26 +1,36 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Cuota } from './cuota.entity';
 import { CreateCuotaDto } from './dto/create-cuota.dto';
 import { UpdateCuotaDto } from './dto/update-cuota.dto';
 
 @Injectable()
 export class CuotaService {
-  create(createCuotaDto: CreateCuotaDto) {
-    return 'This action adds a new cuota';
+  constructor(
+    @InjectRepository(Cuota)
+    private cuotaRepository: Repository<Cuota>
+  ) {}
+
+  async create(createCuotaDto: CreateCuotaDto): Promise<Cuota> {
+    const nuevaCuota = this.cuotaRepository.create(createCuotaDto);
+    return await this.cuotaRepository.save(nuevaCuota);
   }
 
-  findAll() {
-    return `This action returns all cuota`;
+  async findAll(): Promise<Cuota[]> {
+    return await this.cuotaRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} cuota`;
+  async findOne(id: number): Promise<Cuota> {
+    return await this.cuotaRepository.findOneBy({ id });
   }
 
-  update(id: number, updateCuotaDto: UpdateCuotaDto) {
-    return `This action updates a #${id} cuota`;
+  async update(id: number, updateCuotaDto: UpdateCuotaDto): Promise<Cuota> {
+    await this.cuotaRepository.update(id, updateCuotaDto);
+    return this.findOne(id);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} cuota`;
+  async remove(id: number): Promise<void> {
+    await this.cuotaRepository.delete(id);
   }
 }

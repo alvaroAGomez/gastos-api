@@ -2,7 +2,7 @@ import { categoriaModule } from './Categoria/categoria.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UsersModule } from './Usuario/users.module';
+import { UsersModule } from './Usuario/usuario.module';
 import { TarjetaCreditoModule } from './TarjetaCredito/tarjeta-credito.module';
 import { TarjetaCreditoService } from './TarjetaCredito/tarjeta-credito.service';
 import { GastoModule } from './Gasto/gasto.module';
@@ -11,7 +11,7 @@ import { classes } from '@automapper/classes';
 import { AutomapperModule } from '@automapper/nestjs';
 import { CuotaModule } from './cuota/cuota.module';
 import { BancoModule } from './banco/banco.module';
-import { TarjetaDebitoModule } from './tarjeta-debito/tarjeta-debito.module';
+import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
 
 @Module({
   imports: [
@@ -29,9 +29,10 @@ import { TarjetaDebitoModule } from './tarjeta-debito/tarjeta-debito.module';
         username: config.get<string>('DB_USER'),
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        // entities: [__dirname + '/**/*.entity{.ts,.js}'],
         autoLoadEntities: true,
         synchronize: config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
+        logging: true,
       }),
     }),
     AutomapperModule.forRoot({

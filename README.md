@@ -1,10 +1,10 @@
-# 📊 Gastos API
+# 📊 API de Gastos Personales
 
-API RESTful desarrollada con **NestJS** para la gestión de gastos personales, tarjetas de crédito, categorías y autenticación de usuarios con JWT. Soporta categorías globales y por usuario, y está preparada para realizar operaciones CRUD con control de permisos y borrado lógico de entidades.
+API RESTful desarrollada con **NestJS**, **MySQL** y **TypeORM** para gestionar gastos personales, tarjetas (crédito y débito), cuotas, categorías y autenticación de usuarios mediante JWT.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura Actualizada del Proyecto
 
 ```
 src/
@@ -15,59 +15,77 @@ src/
 │   ├── auth.controller.ts
 │   ├── auth.module.ts
 │   ├── auth.service.ts
-│   ├── current-user.decorator.ts
-│   ├── jwt-auth.guard.ts
-│   └── jwt.strategy.ts
+│   ├── jwt.strategy.ts
+│   └── current-user.decorator.ts
 │
-├── Cards/
-│   ├── cards.controller.ts
-│   ├── cards.entity.ts
-│   ├── cards.module.ts
-│   └── cards.service.ts
+├── Banco/
+│   ├── banco.entity.ts
+│   ├── banco.controller.ts
+│   ├── banco.module.ts
+│   └── banco.service.ts
 │
-├── Categories/
+├── CategoriaGasto/
 │   ├── dto/
-│   │   └── category.entity.ts
-│   │   └── category.profile.ts
-│   ├── categorys.controller.ts
-│   ├── categorys.module.ts
-│   └── categorys.service.ts
+│   │   ├── create-categoria.dto.ts
+│   │   ├── update-categoria.dto.ts
+│   │   └── categoria-response.dto.ts
+│   ├── categoria.entity.ts
+│   ├── categoria.controller.ts
+│   ├── categoria.module.ts
+│   └── categoria.service.ts
 │
-├── Expenses/
-│   ├── expenses.controller.ts
-│   ├── expenses.entity.ts
-│   ├── expenses.module.ts
-│   └── expenses.service.ts
+├── Cuota/
+│   ├── cuota.entity.ts
+│   ├── cuota.controller.ts
+│   ├── cuota.module.ts
+│   └── cuota.service.ts
 │
-├── Users/
+├── Gasto/
+│   ├── gasto.entity.ts
+│   ├── gasto.controller.ts
+│   ├── gasto.module.ts
+│   └── gasto.service.ts
+│
+├── TarjetaCredito/
+│   ├── tarjeta-credito.entity.ts
+│   ├── tarjeta-credito.controller.ts
+│   ├── tarjeta-credito.module.ts
+│   └── tarjeta-credito.service.ts
+│
+├── TarjetaDebito/
+│   ├── tarjeta-debito.entity.ts
+│   ├── tarjeta-debito.controller.ts
+│   ├── tarjeta-debito.module.ts
+│   └── tarjeta-debito.service.ts
+│
+├── Usuario/
 │   ├── dto/
-│   │   └── create-user.dto.ts
-│   ├── user.entity.ts
-│   ├── users.controller.ts
-│   ├── users.module.ts
-│   └── users.service.ts
+│   │   ├── create-usuario.dto.ts
+│   │   └── usuario-response.dto.ts
+│   ├── usuario.entity.ts
+│   ├── usuario.controller.ts
+│   ├── usuario.module.ts
+│   └── usuario.service.ts
 │
-├── app.controller.ts
 ├── app.module.ts
-├── app.service.ts
 └── main.ts
 ```
 
 ---
 
-## 🚀 Tecnologías
+## 🚀 Tecnologías Utilizadas
 
 - **NestJS**
 - **TypeORM**
-- **JWT (Passport)**
 - **MySQL**
+- **JWT (Passport)**
 - **Swagger (OpenAPI)**
-- **Class Validator & Class Transformer**
 - **AutoMapper**
+- **Class Validator & Class Transformer**
 
 ---
 
-## ⚙️ Configuración Inicial
+## ⚙️ Instalación y Ejecución
 
 1. Clonar el repositorio:
 
@@ -81,72 +99,89 @@ src/
    npm install
    ```
 
-3. Crear los archivos de entorno:
-
-   - `.env.development`
-   - `.env.production`
-
-   Ejemplo:
+3. Crear archivos de entorno:
+   `.env.development` / `.env.production`
 
    ```env
-   DB_HOST= localhost
-   DB_PORT= port
+   DB_HOST=localhost
+   DB_PORT=3306
    DB_USERNAME=root
-   DB_PASSWORD=**********
-   DB_DATABASE=DB
-   JWT_SECRET=**********
+   DB_PASSWORD=123456
+   DB_DATABASE=gastos_db
+   JWT_SECRET=tu_clave_secreta
    ```
 
-4. Ejecutar migraciones (si corresponde) o sincronizar entidades:
+4. Ejecutar servidor (desarrollo):
    ```bash
    npm run start:dev
    ```
 
 ---
 
-## 🔐 Autenticación
+## 🔐 Autenticación JWT
 
-- Registro de usuarios
-- Login con JWT
-- Decorador `@CurrentUser()` para obtener el usuario autenticado
-
----
-
-## 📂 Módulo de Categorías
-
-- CRUD completo para categorías de usuario
-- Soporte para categorías **globales** (sin usuario)
-- Borrado lógico con `@DeleteDateColumn`
-- Validación con DTOs y mapeo con AutoMapper
+- Registro (`POST /auth/register`)
+- Login (`POST /auth/login`)
+- Decorador personalizado `@CurrentUser()` para obtener usuario autenticado
 
 ---
 
-## 📇 Módulo de Tarjetas
+## 🏦 Módulo de Bancos
 
-- Alta de tarjetas con límite, tipo, fechas de cierre y vencimiento
-- Organización por usuario
-- Control total desde el backend
+- Administración básica de bancos (alta, listado, edición y baja).
 
 ---
 
-## 💰 Módulo de Gastos
+## 📇 Módulo Tarjetas
 
-- Registro de gastos
-- Asociación con categorías
-- Próximamente: filtros, reportes y estadísticas
-
----
-
-## 📌 ToDo Futuro
-
-- 🔒 Refuerzo de permisos con Guards personalizados
-- 📈 Endpoint de estadísticas
-- 🖥️ Panel de administración (opcional)
-- 📆 Exportar CSV/Excel
+- Gestión separada de tarjetas de **Crédito** y **Débito**.
+- Soporte para límites, fechas de cierre y vencimiento en crédito.
+- Saldo disponible en débito.
 
 ---
 
-## 🧑‍💻 Autor
+## 🗂️ Módulo Categorías de Gastos
 
-Proyecto desarrollado por Alvaro Gomez  
-Si te sirvió, ¡dejale una estrellita al repo ⭐!
+- Categorías globales (disponibles para todos).
+- Categorías personalizadas por usuario.
+- Borrado lógico con `@DeleteDateColumn`.
+
+---
+
+## 💸 Módulo de Gastos
+
+- Gastos generales con posibilidad de cuotas (solo crédito).
+- Asociación con tarjetas y categorías.
+- Control estricto de reglas de negocio (por ej.: cuotas solo para crédito).
+
+---
+
+## 📅 Módulo de Cuotas
+
+- Gestión individual de cuotas de gastos en crédito.
+- Seguimiento de pagos con estado `pagada` (true/false).
+
+---
+
+## 🧪 Documentación con Swagger
+
+Accede a la documentación interactiva con:
+
+```
+http://localhost:3000/api
+```
+
+---
+
+## 📌 Próximas Mejoras
+
+- Dashboard de estadísticas.
+- Exportar reportes CSV/Excel.
+- Implementación de migraciones de base de datos para producción.
+
+---
+
+## 👨‍💻 Autor
+
+Desarrollado por Alvaro Gomez.  
+¡Si te sirvió, dejale una ⭐ al repo!

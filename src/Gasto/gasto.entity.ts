@@ -2,7 +2,7 @@ import { CategoriaGasto } from 'src/Categoria/categoria.entity';
 import { Cuota } from 'src/Cuota/cuota.entity';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
-import { Usuario } from 'src/Usuario/user.entity';
+import { Usuario } from 'src/Usuario/usuario.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
 
 @Entity('Gasto')

@@ -5,7 +5,7 @@ import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 import { CategoriaResponseDto } from './dto/categoria-response.dto';
 import { CategoriaGasto } from './categoria.entity';
-import { Usuario } from 'src/Usuario/user.entity';
+import { Usuario } from 'src/Usuario/usuario.entity';
 
 @Injectable()
 export class CategoriaService {

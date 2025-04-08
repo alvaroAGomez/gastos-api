@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
 import { Banco } from '../Banco/banco.entity';
 import { Gasto } from 'src/Gasto/gasto.entity';
-import { Usuario } from 'src/Usuario/user.entity';
+import { Usuario } from 'src/Usuario/usuario.entity';
 
 @Entity('TarjetaDebito')
 export class TarjetaDebito {

@@ -2,7 +2,7 @@ import { Controller, Post, Body, UseGuards, Get, Patch, Param, Delete } from '@n
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { Usuario } from '../Usuario/user.entity';
+import { Usuario } from '../Usuario/usuario.entity';
 import { CategoriaService } from './categoria.service';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';

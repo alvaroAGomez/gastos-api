@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Usuario } from './user.entity';
+import { Usuario } from './usuario.entity';
 import * as bcrypt from 'bcrypt';
 import { CreateUsuarioDto } from './dto/create-user.dto';
 
