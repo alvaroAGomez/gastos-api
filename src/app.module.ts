@@ -4,7 +4,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './Usuario/usuario.module';
 import { TarjetaCreditoModule } from './TarjetaCredito/tarjeta-credito.module';
-import { TarjetaCreditoService } from './TarjetaCredito/tarjeta-credito.service';
 import { GastoModule } from './Gasto/gasto.module';
 import { AuthModule } from './auth/auth.module';
 import { classes } from '@automapper/classes';
@@ -29,10 +28,10 @@ import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
         username: config.get<string>('DB_USER'),
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
-        // entities: [__dirname + '/**/*.entity{.ts,.js}'],
         autoLoadEntities: true,
         synchronize: config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
-        logging: true,
+        /*         logging: true,
+        logger: 'advanced-console', */
       }),
     }),
     AutomapperModule.forRoot({
@@ -47,6 +46,6 @@ import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
     BancoModule,
     TarjetaDebitoModule,
   ],
-  providers: [TarjetaCreditoService],
+  providers: [],
 })
 export class AppModule {}

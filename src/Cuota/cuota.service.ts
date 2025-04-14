@@ -1,36 +1,50 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Cuota } from './cuota.entity';
-import { CreateCuotaDto } from './dto/create-cuota.dto';
-import { UpdateCuotaDto } from './dto/update-cuota.dto';
+import { Repository } from 'typeorm';
+import { Gasto } from 'src/Gasto/gasto.entity';
 
 @Injectable()
 export class CuotaService {
   constructor(
     @InjectRepository(Cuota)
-    private cuotaRepository: Repository<Cuota>
+    private readonly cuotaRepo: Repository<Cuota>
   ) {}
 
-  async create(createCuotaDto: CreateCuotaDto): Promise<Cuota> {
-    const nuevaCuota = this.cuotaRepository.create(createCuotaDto);
-    return await this.cuotaRepository.save(nuevaCuota);
+  async generarCuotas(gasto: Gasto): Promise<void> {
+    if (!gasto.totalCuotas || gasto.totalCuotas <= 0) return;
+
+    const montoPorCuota = +(gasto.monto / gasto.totalCuotas).toFixed(2);
+    const cuotas: Cuota[] = [];
+
+    for (let i = 0; i < gasto.totalCuotas; i++) {
+      const cuota = new Cuota();
+      cuota.gasto = gasto;
+      cuota.numeroCuota = i + 1;
+      cuota.montoCuota = montoPorCuota;
+
+      const fecha = new Date(gasto.fecha);
+      fecha.setMonth(fecha.getMonth() + i);
+      cuota.fechaVencimiento = fecha;
+
+      cuotas.push(cuota);
+    }
+
+    await this.cuotaRepo.save(cuotas);
   }
 
-  async findAll(): Promise<Cuota[]> {
-    return await this.cuotaRepository.find();
+  async eliminarCuotasPorGasto(gastoId: number): Promise<void> {
+    await this.cuotaRepo.delete({ gastoId }); // ✅ esta es la forma correcta
   }
 
-  async findOne(id: number): Promise<Cuota> {
-    return await this.cuotaRepository.findOneBy({ id });
+  async obtenerCuotasPorGasto(gastoId: number): Promise<Cuota[]> {
+    return this.cuotaRepo.find({
+      where: { gastoId }, // ✅ también corregido
+      order: { numeroCuota: 'ASC' },
+    });
   }
 
-  async update(id: number, updateCuotaDto: UpdateCuotaDto): Promise<Cuota> {
-    await this.cuotaRepository.update(id, updateCuotaDto);
-    return this.findOne(id);
-  }
-
-  async remove(id: number): Promise<void> {
-    await this.cuotaRepository.delete(id);
+  async marcarComoPagada(cuotaId: number): Promise<void> {
+    await this.cuotaRepo.update(cuotaId, { pagada: true });
   }
 }

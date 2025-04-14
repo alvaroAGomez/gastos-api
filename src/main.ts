@@ -12,22 +12,31 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // remueve propiedades no definidas en el DTO
-      forbidNonWhitelisted: true, // lanza error si viene algo no permitido
-      transform: true, // convierte los payloads al tipo definido (ej. string a number)
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     })
   );
+  app.enableShutdownHooks();
 
-  // 👉 Configuración de Swagger
+  // 👉 Configuración de Swagger con tags ordenados
   const config = new DocumentBuilder()
     .setTitle('Gastos API')
     .setDescription('Documentación de la API de gastos')
     .setVersion('1.0')
     .addBearerAuth()
+    .addTag('Auth')
+    .addTag('Banco')
+    .addTag('Categoria Gastos')
+    .addTag('Cuota')
+    .addTag('Gastos')
+    .addTag('Tarjeta Crédito')
+    .addTag('Tarjeta Débito')
+    //.addTag('Usuario')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/', app, document); // Documentación en http://localhost:3000/api/
+  SwaggerModule.setup('api/', app, document);
 
   await app.listen(port);
   console.log(`🚀 App corriendo en http://localhost:${port}`);

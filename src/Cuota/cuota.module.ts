@@ -8,5 +8,6 @@ import { Cuota } from './cuota.entity';
   imports: [TypeOrmModule.forFeature([Cuota])],
   controllers: [CuotaController],
   providers: [CuotaService],
+  exports: [CuotaService],
 })
 export class CuotaModule {}

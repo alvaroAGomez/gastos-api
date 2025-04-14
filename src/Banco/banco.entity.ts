@@ -1,8 +1,9 @@
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne } from 'typeorm';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Usuario } from 'src/Usuario/usuario.entity';
 
-@Entity('Banco')
+@Entity('banco')
 export class Banco {
   @PrimaryGeneratedColumn()
   id: number;
@@ -12,6 +13,9 @@ export class Banco {
 
   @Column({ length: 50 })
   pais: string;
+
+  @ManyToOne(() => Usuario, (usuario) => usuario.bancos, { eager: false })
+  usuario: Usuario;
 
   @OneToMany(() => TarjetaCredito, (tarjeta) => tarjeta.banco)
   tarjetasCredito: TarjetaCredito[];

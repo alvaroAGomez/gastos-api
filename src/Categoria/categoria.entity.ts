@@ -2,7 +2,7 @@ import { Gasto } from 'src/Gasto/gasto.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, DeleteDateColumn } from 'typeorm';
 
-@Entity('CategoriaGasto')
+@Entity('categoria_gasto')
 export class CategoriaGasto {
   @PrimaryGeneratedColumn()
   id: number;

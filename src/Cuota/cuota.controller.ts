@@ -1,18 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, UseGuards } from '@nestjs/common';
 import { CuotaService } from './cuota.service';
-import { CreateCuotaDto } from './dto/create-cuota.dto';
-import { UpdateCuotaDto } from './dto/update-cuota.dto';
+
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('Cuota')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
-@Controller('cuota')
+@Controller('Cuota')
 export class CuotaController {
   constructor(private readonly cuotaService: CuotaService) {}
 
-  @Post()
+  /*   @Post()
   create(@Body() createCuotaDto: CreateCuotaDto) {
     return this.cuotaService.create(createCuotaDto);
   }
@@ -35,5 +34,5 @@ export class CuotaController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.cuotaService.remove(+id);
-  }
+  } */
 }

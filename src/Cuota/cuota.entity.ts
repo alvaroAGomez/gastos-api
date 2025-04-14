@@ -1,12 +1,16 @@
 import { Gasto } from 'src/Gasto/gasto.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 
-@Entity('Cuota')
+@Entity('cuota')
 export class Cuota {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Gasto, (gasto) => gasto.cuotas)
+  @Column()
+  gastoId: number; // 👈 lo agregás explícitamente
+
+  @ManyToOne(() => Gasto, (gasto) => gasto.cuotas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'gastoId' }) // 👈 asegurás que el campo gastoId se use como FK
   gasto: Gasto;
 
   @Column()

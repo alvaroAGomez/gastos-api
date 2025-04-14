@@ -11,17 +11,17 @@ import { Usuario } from 'src/Usuario/usuario.entity';
 export class CategoriaService {
   constructor(
     @InjectRepository(CategoriaGasto)
-    private categoryRepository: Repository<CategoriaGasto>
+    private categoriaGastoRepository: Repository<CategoriaGasto>
   ) {}
 
   async create(dto: CreateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    const category = this.categoryRepository.create({
+    const categoriaGasto = this.categoriaGastoRepository.create({
       nombre: dto.nombre,
       descripcion: dto.descripcion ?? null,
       usuario,
     });
 
-    const saved = await this.categoryRepository.save(category);
+    const saved = await this.categoriaGastoRepository.save(categoriaGasto);
 
     return {
       id: saved.id,
@@ -31,11 +31,11 @@ export class CategoriaService {
   }
 
   async findAllForUser(usuario: Usuario): Promise<CategoriaResponseDto[]> {
-    const categories = await this.categoryRepository
-      .createQueryBuilder('category')
-      .leftJoinAndSelect('category.usuario', 'usuario')
-      .where('(usuario.id = :usuarioId OR category.usuario IS NULL)', { usuarioId: usuario.id })
-      .andWhere('category.deletedAt IS NULL')
+    const categories = await this.categoriaGastoRepository
+      .createQueryBuilder('categoriaGasto')
+      .leftJoinAndSelect('categoriaGasto.usuario', 'usuario')
+      .where('(usuario.id = :usuarioId OR categoriaGasto.usuario IS NULL)', { usuarioId: usuario.id })
+      .andWhere('categoriaGasto.deletedAt IS NULL')
       .getMany();
 
     return categories.map((cat) => ({
@@ -46,19 +46,19 @@ export class CategoriaService {
   }
 
   async update(id: number, dto: UpdateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    const category = await this.categoryRepository.findOne({
+    const categoriaGasto = await this.categoriaGastoRepository.findOne({
       where: { id, usuario: { id: usuario.id } },
       relations: ['usuario'],
     });
 
-    if (!category) {
+    if (!categoriaGasto) {
       throw new NotFoundException('Categoría no encontrada');
     }
 
-    category.nombre = dto.nombre ?? category.nombre;
-    category.descripcion = dto.descripcion ?? category.descripcion;
+    categoriaGasto.nombre = dto.nombre ?? categoriaGasto.nombre;
+    categoriaGasto.descripcion = dto.descripcion ?? categoriaGasto.descripcion;
 
-    const updated = await this.categoryRepository.save(category);
+    const updated = await this.categoriaGastoRepository.save(categoriaGasto);
 
     return {
       id: updated.id,
@@ -68,33 +68,33 @@ export class CategoriaService {
   }
 
   async remove(id: number, usuario: Usuario): Promise<void> {
-    const category = await this.categoryRepository.findOne({
+    const categoriaGasto = await this.categoriaGastoRepository.findOne({
       where: { id, usuario: { id: usuario.id } },
       relations: ['usuario'],
     });
 
-    if (!category) {
+    if (!categoriaGasto) {
       throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
     }
 
-    if (!category.usuario) {
+    if (!categoriaGasto.usuario) {
       throw new NotFoundException('No se pueden eliminar categorías globales');
     }
 
-    await this.categoryRepository.softRemove(category);
+    await this.categoriaGastoRepository.softRemove(categoriaGasto);
   }
 
   async restore(id: number, usuario: Usuario): Promise<void> {
-    const category = await this.categoryRepository.findOne({
+    const categoriaGasto = await this.categoriaGastoRepository.findOne({
       where: { id },
       withDeleted: true,
       relations: ['usuario'],
     });
 
-    if (!category || category.usuario?.id !== usuario.id) {
+    if (!categoriaGasto || categoriaGasto.usuario?.id !== usuario.id) {
       throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
     }
 
-    await this.categoryRepository.restore(id);
+    await this.categoriaGastoRepository.restore(id);
   }
 }

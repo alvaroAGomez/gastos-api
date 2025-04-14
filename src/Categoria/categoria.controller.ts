@@ -7,10 +7,10 @@ import { CategoriaService } from './categoria.service';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 
-@ApiTags('categoria')
+@ApiTags('Categoria Gastos')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
-@Controller('categoria')
+@Controller('CategoriaGasto')
 export class CategoriaController {
   constructor(private readonly categoriesService: CategoriaService) {}
 

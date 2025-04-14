@@ -1,9 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, DeleteDateColumn } from 'typeorm';
 import { Banco } from '../Banco/banco.entity';
 import { Gasto } from 'src/Gasto/gasto.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
 
-@Entity('TarjetaDebito')
+@Entity('tarjeta_debito')
 export class TarjetaDebito {
   @PrimaryGeneratedColumn()
   id: number;
@@ -25,4 +25,7 @@ export class TarjetaDebito {
 
   @OneToMany(() => Gasto, (gasto) => gasto.tarjetaDebito)
   gastos: Gasto[];
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }
