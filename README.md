@@ -1,187 +1,211 @@
-# 📊 API de Gastos Personales
+# 📊 Gastos API
 
-API RESTful desarrollada con **NestJS**, **MySQL** y **TypeORM** para gestionar gastos personales, tarjetas (crédito y débito), cuotas, categorías y autenticación de usuarios mediante JWT.
+Backend desarrollado en **NestJS + TypeORM** con base de datos **MySQL**, que sirve como motor de una aplicación de control de gastos personales. Permite gestionar usuarios, categorías de gasto, bancos, tarjetas de crédito/débito, cuotas y más.
 
 ---
 
-## 📁 Estructura Actualizada del Proyecto
+## 🚀 Tecnologías utilizadas
+
+- [NestJS](https://nestjs.com/)
+- [TypeORM](https://typeorm.io/)
+- [MySQL](https://www.mysql.com/)
+- [Swagger](https://swagger.io/) para documentación de API
+- [JWT](https://jwt.io/) para autenticación
+- Validación con `class-validator` y `class-transformer`
+
+---
+
+## 📁 Estructura del proyecto
 
 ```
 src/
-├── Auth/
-│   ├── dto/
-│   │   ├── login.dto.ts
-│   │   └── register.dto.ts
+│
+├── Auth/                      # Registro, login, JWT, guardias
 │   ├── auth.controller.ts
-│   ├── auth.module.ts
 │   ├── auth.service.ts
 │   ├── jwt.strategy.ts
-│   └── current-user.decorator.ts
+│   ├── jwt-auth.guard.ts
+│   ├── current-user.decorator.ts
+│   └── dto/
+│       ├── login.dto.ts
+│       └── register.dto.ts
 │
-├── Banco/
-│   ├── banco.entity.ts
+├── Banco/                     # CRUD de bancos
 │   ├── banco.controller.ts
-│   ├── banco.module.ts
-│   └── banco.service.ts
+│   ├── banco.service.ts
+│   ├── banco.entity.ts
+│   └── dto/
+│       ├── create-banco.dto.ts
+│       └── banco-response.dto.ts
 │
-├── CategoriaGasto/
-│   ├── dto/
-│   │   ├── create-categoria.dto.ts
-│   │   ├── update-categoria.dto.ts
-│   │   └── categoria-response.dto.ts
-│   ├── categoria.entity.ts
+├── Categoria/                 # Categorías globales y de usuario
 │   ├── categoria.controller.ts
-│   ├── categoria.module.ts
-│   └── categoria.service.ts
+│   ├── categoria.service.ts
+│   ├── categoria.entity.ts
+│   └── dto/
+│       ├── create-categoria.dto.ts
+│       ├── update-categoria.dto.ts
+│       └── categoria-response.dto.ts
 │
-├── Cuota/
-│   ├── cuota.entity.ts
+├── Cuota/                     # Cuotas de tarjeta de crédito
 │   ├── cuota.controller.ts
-│   ├── cuota.module.ts
-│   └── cuota.service.ts
+│   ├── cuota.service.ts
+│   ├── cuota.entity.ts
+│   └── dto/
+│       ├── create-cuota.dto.ts
+│       ├── update-cuota.dto.ts
+│       └── cuota-response.dto.ts
 │
-├── Gasto/
-│   ├── gasto.entity.ts
+├── Gasto/                     # Registro de gastos
 │   ├── gasto.controller.ts
-│   ├── gasto.module.ts
-│   └── gasto.service.ts
+│   ├── gasto.service.ts
+│   ├── gasto.entity.ts
+│   └── dto/
+│       ├── create-gasto.dto.ts
+│       └── gasto-response.dto.ts
 │
-├── TarjetaCredito/
-│   ├── tarjeta-credito.entity.ts
+├── TarjetaCredito/           # Tarjetas de crédito
 │   ├── tarjeta-credito.controller.ts
-│   ├── tarjeta-credito.module.ts
-│   └── tarjeta-credito.service.ts
+│   ├── tarjeta-credito.service.ts
+│   ├── tarjeta-credito.entity.ts
+│   └── dto/
+│       ├── create-tarjeta-credito.dto.ts
+│       └── tarjeta-credito-response.dto.ts
 │
-├── TarjetaDebito/
-│   ├── tarjeta-debito.entity.ts
+├── TarjetaDebito/            # Tarjetas de débito
 │   ├── tarjeta-debito.controller.ts
-│   ├── tarjeta-debito.module.ts
-│   └── tarjeta-debito.service.ts
+│   ├── tarjeta-debito.service.ts
+│   ├── tarjeta-debito.entity.ts
+│   └── dto/
+│       ├── create-tarjeta-debito.dto.ts
+│       └── tarjeta-debito-response.dto.ts
 │
-├── Usuario/
-│   ├── dto/
-│   │   ├── create-usuario.dto.ts
-│   │   └── usuario-response.dto.ts
-│   ├── usuario.entity.ts
+├── Usuario/                  # Gestión de usuarios
 │   ├── usuario.controller.ts
-│   ├── usuario.module.ts
-│   └── usuario.service.ts
+│   ├── usuario.service.ts
+│   ├── usuario.entity.ts
+│   └── dto/
+│       ├── create-user.dto.ts
+│       └── usuario-response.dto.ts
 │
-├── app.module.ts
-└── main.ts
+├── app.module.ts             # Módulo principal
+├── app.controller.ts
+├── app.service.ts
+└── main.ts                   # Punto de entrada
 ```
 
 ---
 
-## 🚀 Tecnologías Utilizadas
+## ⚙️ Instalación y configuración
 
-- **NestJS**
-- **TypeORM**
-- **MySQL**
-- **JWT (Passport)**
-- **Swagger (OpenAPI)**
-- **AutoMapper**
-- **Class Validator & Class Transformer**
+1. **Clonar el repositorio**
 
----
-
-## ⚙️ Instalación y Ejecución
-
-1. Clonar el repositorio:
-
-   ```bash
-   git clone https://github.com/tu-usuario/gastos-api.git
-   ```
-
-2. Instalar dependencias:
-
-   ```bash
-   npm install
-   ```
-
-3. Crear archivos de entorno:
-   `.env.development` / `.env.production`
-
-   ```env
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_USERNAME=root
-   DB_PASSWORD=123456
-   DB_DATABASE=gastos_db
-   JWT_SECRET=tu_clave_secreta
-   ```
-
-4. Ejecutar servidor (desarrollo):
-   ```bash
-   npm run start:dev
-   ```
-
----
-
-## 🔐 Autenticación JWT
-
-- Registro (`POST /auth/register`)
-- Login (`POST /auth/login`)
-- Decorador personalizado `@CurrentUser()` para obtener usuario autenticado
-
----
-
-## 🏦 Módulo de Bancos
-
-- Administración básica de bancos (alta, listado, edición y baja).
-
----
-
-## 📇 Módulo Tarjetas
-
-- Gestión separada de tarjetas de **Crédito** y **Débito**.
-- Soporte para límites, fechas de cierre y vencimiento en crédito.
-- Saldo disponible en débito.
-
----
-
-## 🗂️ Módulo Categorías de Gastos
-
-- Categorías globales (disponibles para todos).
-- Categorías personalizadas por usuario.
-- Borrado lógico con `@DeleteDateColumn`.
-
----
-
-## 💸 Módulo de Gastos
-
-- Gastos generales con posibilidad de cuotas (solo crédito).
-- Asociación con tarjetas y categorías.
-- Control estricto de reglas de negocio (por ej.: cuotas solo para crédito).
-
----
-
-## 📅 Módulo de Cuotas
-
-- Gestión individual de cuotas de gastos en crédito.
-- Seguimiento de pagos con estado `pagada` (true/false).
-
----
-
-## 🧪 Documentación con Swagger
-
-Accede a la documentación interactiva con:
-
+```bash
+git clone https://github.com/alvaroAGomez/gastos-api.git
+cd gastos-api
 ```
-http://localhost:3000/api
+
+2. **Instalar dependencias**
+
+```bash
+npm install
+```
+
+3. **Crear archivo `.env`**
+
+Usá el siguiente `.env`:
+
+```env
+# Entorno
+NODE_ENV=development
+
+# Configuración de la base de datos
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=123456
+DB_NAME=gastos_app
+
+# Auth
+JWT_SECRET=tu_clave_secreta_segura
+JWT_EXPIRATION=1h
+
+# Puerto de la app
+PORT=3000
+```
+
+4. **Levantar el servidor**
+
+```bash
+npm run start:dev
 ```
 
 ---
 
-## 📌 Próximas Mejoras
+## 🧪 Validaciones
 
-- Dashboard de estadísticas.
-- Exportar reportes CSV/Excel.
-- Implementación de migraciones de base de datos para producción.
+- Validación global mediante `ValidationPipe`
+- Rechazo de propiedades no permitidas (`whitelist`)
+- Transformación automática de tipos (`transform: true`)
+- Decoradores `@IsNotEmpty`, `@IsString`, `@IsOptional`, etc.
+- Eliminación lógica con campo `deletedAt` (`@DeleteDateColumn()`)
+
+---
+
+## 🛡️ Autenticación
+
+- Login y registro de usuarios
+- Generación de tokens JWT
+- Guardias protegidas con `JwtAuthGuard`
+- Decorador personalizado `@CurrentUser()` para acceder al usuario logueado
+
+---
+
+## 📖 Documentación Swagger
+
+Al ejecutar el servidor, accedé a:
+
+```
+http://localhost:3000/api/
+```
+
+Incluye botón para autenticarse con JWT y probar endpoints protegidos.
+
+---
+
+## 🧱 Convenciones y reglas de negocio
+
+- Tablas y entidades con nombres en español
+- Cuotas **solo** si el gasto está asociado a tarjeta de crédito (por defecto 1 cuota si no se especifica)
+- No se permite asociar un gasto a tarjeta de crédito y débito al mismo tiempo
+- Categorías pueden ser globales (`usuario = null`) o personalizadas por usuario
+
+---
+
+## 🗃️ Base de datos
+
+Asegurate de tener MySQL instalado y creado el schema `gastos_app`. El sistema crea las tablas automáticamente en desarrollo (`synchronize: true`).
+
+---
+
+## 🔒 Seguridad
+
+- Hasheo de contraseñas con `bcrypt`
+- Tokens seguros con expiración configurable
+- Endpoints protegidos por JWT
+
+---
+
+## 📌 Repositorio del Frontend
+
+Complementá esta API con el frontend Angular disponible en:
+
+🔗 [GastosApp - Frontend](https://github.com/alvaroAGomez/GastosApp)
 
 ---
 
 ## 👨‍💻 Autor
 
-Desarrollado por Alvaro Gomez.  
-¡Si te sirvió, dejale una ⭐ al repo!
+**Alvaro A. Gomez**  
+📧 alvaro11122@gmail.com  
+🔗 [GitHub](https://github.com/alvaroAGomez)
