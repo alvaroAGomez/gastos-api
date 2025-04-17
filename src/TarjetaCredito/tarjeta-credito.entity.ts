@@ -23,11 +23,11 @@ export class TarjetaCredito {
   @Column('decimal', { precision: 10, scale: 2 })
   limiteCredito: number;
 
-  @Column({ type: 'date' })
-  cierreCiclo: Date;
+  @Column({ type: 'date', nullable: true })
+  cierreCiclo?: Date;
 
-  @Column({ type: 'date' })
-  fechaVencimiento: Date;
+  @Column({ type: 'date', nullable: true })
+  fechaVencimiento?: Date;
 
   @OneToMany(() => Gasto, (gasto) => gasto.tarjetaCredito)
   gastos: Gasto[];
