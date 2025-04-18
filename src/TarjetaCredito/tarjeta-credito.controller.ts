@@ -7,6 +7,7 @@ import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoResponseDto } from './dto/tarjeta-credito-response.dto';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { Usuario } from 'src/Usuario/usuario.entity';
+import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 
 @ApiTags('Tarjeta Crédito')
 @UseGuards(AuthGuard('jwt'))
@@ -27,6 +28,13 @@ export class TarjetaCreditoController {
   @ApiResponse({ status: 200, type: [TarjetaCreditoResponseDto] })
   listarPorUsuario(@CurrentUser() user: Usuario) {
     return this.service.listarPorUsuario(user.id);
+  }
+
+  @Get(':id/detalle')
+  @ApiOperation({ summary: 'Detalle de cabecera de tarjeta de crédito' })
+  @ApiResponse({ status: 200, type: TarjetaCreditoDetalleDto })
+  obtenerDetalle(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.service.obtenerDetalleTarjeta(id, user.id);
   }
 
   @Put(':id')

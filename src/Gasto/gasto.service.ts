@@ -10,6 +10,7 @@ import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { CuotaService } from 'src/Cuota/cuota.service';
+import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 
 @Injectable()
 export class GastoService {
@@ -142,13 +143,76 @@ export class GastoService {
     await this.gastoRepo.delete(id);
   }
 
-  private mapToResponseDto = (gasto: Gasto): GastoResponseDto => ({
+  async gastosPorTarjeta(tarjetaId: number, usuarioId: number, filtros: GastoTarjetaFiltroDto) {
+    const {
+      page = 1,
+      limit = 10,
+      fechaDesde,
+      fechaHasta,
+      categoria,
+      cuotasRestantes,
+      sortField = 'fecha',
+      sortDirection = 'DESC',
+    } = filtros;
+
+    const query = this.gastoRepo
+      .createQueryBuilder('gasto')
+      .leftJoinAndSelect('gasto.categoria', 'categoria')
+      .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
+      .andWhere('gasto.usuarioId = :usuarioId', { usuarioId });
+
+    if (fechaDesde != '' && fechaDesde != null) query.andWhere('gasto.fecha >= :fechaDesde', { fechaDesde });
+    if (fechaHasta != '' && fechaHasta != null) query.andWhere('gasto.fecha <= :fechaHasta', { fechaHasta });
+
+    // Cambia aquí: solo filtra por categoría si no es "Todas" ni vacío
+    if (categoria && categoria !== 'Todas') {
+      query.andWhere('gasto.categoria = :categoriaId', { categoriaId: categoria });
+    }
+
+    query.orderBy(`gasto.${sortField}`, sortDirection as any);
+
+    // Traer todos los gastos para calcular cuotas restantes en memoria
+    const allData = await query.getMany();
+
+    // Calcular cuotasRestantes para cada gasto
+    const now = new Date();
+    const gastosConCuotas = allData.map((gasto) => {
+      let cuotasRestantes = 0;
+      if (gasto.esEnCuotas && gasto.totalCuotas && gasto.fecha) {
+        const fechaGasto = new Date(gasto.fecha);
+        const mesesTranscurridos =
+          (now.getFullYear() - fechaGasto.getFullYear()) * 12 + (now.getMonth() - fechaGasto.getMonth());
+        cuotasRestantes = Math.max(gasto.totalCuotas - mesesTranscurridos, 0);
+      }
+      return {
+        ...this.mapToResponseDto(gasto),
+        cuotasRestantes,
+      };
+    });
+
+    // Filtrar por cuotasRestantes si corresponde
+    let filtered = gastosConCuotas;
+    if (cuotasRestantes !== undefined && cuotasRestantes !== null && !isNaN(Number(cuotasRestantes))) {
+      filtered = gastosConCuotas.filter((g) => g.cuotasRestantes === Number(cuotasRestantes));
+    }
+
+    // Paginación manual después del filtro
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paged = filtered.slice(start, end);
+
+    return { data: paged, total: filtered.length };
+  }
+
+  private mapToResponseDto = (gasto: Gasto): any => ({
     id: gasto.id,
     monto: gasto.monto,
     fecha: gasto.fecha,
     descripcion: gasto.descripcion,
-    esEnCuotas: gasto.esEnCuotas,
-    numeroCuotas: gasto.totalCuotas,
-    nombreCategoria: gasto.categoria?.nombre ?? '',
+    categoria: gasto.categoria?.nombre ?? '',
+    cuotas: gasto.totalCuotas,
+    cuotasRestantes: undefined,
+    cardId: gasto.tarjetaCredito?.id?.toString() ?? '',
+    nameCard: gasto.tarjetaCredito?.nombreTarjeta ?? '',
   });
 }

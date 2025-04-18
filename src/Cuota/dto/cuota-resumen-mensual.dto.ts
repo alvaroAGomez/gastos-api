@@ -16,6 +16,9 @@ export class CuotaResumenTarjetaDto {
   nombreTarjeta: string;
 
   @ApiProperty()
+  banco?: string;
+
+  @ApiProperty()
   anio: number;
 
   @ApiProperty({ type: [ResumenMensualDto] })

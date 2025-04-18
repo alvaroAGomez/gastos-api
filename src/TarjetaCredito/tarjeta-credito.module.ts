@@ -5,9 +5,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TarjetaCredito } from './tarjeta-credito.entity';
 import { Banco } from 'src/Banco/banco.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
+import { Cuota } from 'src/Cuota/cuota.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TarjetaCredito, Banco, Usuario])],
+  imports: [TypeOrmModule.forFeature([TarjetaCredito, Banco, Usuario, Cuota])],
   providers: [TarjetaCreditoService],
   controllers: [TarjetaCreditoController],
 })

@@ -60,17 +60,20 @@ export class CuotaService {
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
       .innerJoin('gasto.tarjetaCredito', 'tarjeta')
+      .leftJoin('tarjeta.banco', 'banco')
       .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id })
       .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio: year })
       .select([
         'tarjeta.id AS tarjetaId',
         'tarjeta.nombre AS nombreTarjeta',
+        'banco.nombre AS banco', // <-- agrega el banco aquí
         'MONTH(cuota.fechaVencimiento) AS mes',
         'SUM(cuota.montoCuota) AS totalCuotas',
       ])
       .groupBy('tarjeta.id')
       .addGroupBy('mes')
       .addGroupBy('tarjeta.nombre')
+      .addGroupBy('banco.nombre')
       .orderBy('tarjeta.nombre', 'ASC')
       .addOrderBy('mes', 'ASC')
       .getRawMany();
@@ -94,12 +97,13 @@ export class CuotaService {
     ];
 
     for (const cuota of cuotas) {
-      const { tarjetaId, nombreTarjeta, mes, totalCuotas } = cuota;
+      const { tarjetaId, nombreTarjeta, banco, mes, totalCuotas } = cuota;
 
       if (!tarjetasMap.has(tarjetaId)) {
         tarjetasMap.set(tarjetaId, {
           tarjetaId,
           nombreTarjeta,
+          banco, // <-- agrega el banco aquí
           anio: year,
           resumenMensual: [],
           totalAnual: 0,
@@ -265,6 +269,12 @@ export class CuotaService {
       .addSelect('gasto.id', 'gastoId')
       .getRawMany();
 
+    // Obtener nombre de la tarjeta y banco
+    const tarjeta = await this.cuotaRepo.manager.getRepository('TarjetaCredito').findOne({
+      where: { id: tarjetaId },
+      relations: ['banco'],
+    });
+
     // Mapear por mes
     const resumenMensual = meses.map((mes, idx) => {
       const mesNum = idx + 1;
@@ -286,14 +296,12 @@ export class CuotaService {
       };
     });
 
-    // Obtener nombre de la tarjeta
-    const tarjeta = await this.cuotaRepo.manager.getRepository('TarjetaCredito').findOne({ where: { id: tarjetaId } });
-
     const totalAnual = +resumenMensual.reduce((acc, m) => acc + m.totalMes, 0).toFixed(2);
 
     return {
       tarjetaId,
       nombreTarjeta: tarjeta?.nombreTarjeta ?? '',
+      banco: tarjeta?.banco?.nombre || tarjeta?.banco?.nombreBanco || tarjeta?.banco?.descripcion || undefined,
       anio: year,
       resumenMensual,
       totalAnual,

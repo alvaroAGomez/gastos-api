@@ -7,6 +7,7 @@ export interface CuotaResumenTarjetaDetalladoMesDto {
 
 export interface CuotaResumenTarjetaDetalladoResponseDto {
   tarjetaId: number;
+  banco: string;
   nombreTarjeta: string;
   anio: number;
   resumenMensual: CuotaResumenTarjetaDetalladoMesDto[];

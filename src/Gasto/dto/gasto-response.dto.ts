@@ -20,5 +20,17 @@ export class GastoResponseDto {
   numeroCuotas?: number;
 
   @ApiProperty()
-  nombreCategoria: string;
+  categoria: string;
+
+  @ApiPropertyOptional()
+  cuotas?: number;
+
+  @ApiPropertyOptional()
+  cuotasRestantes?: number;
+
+  @ApiPropertyOptional()
+  cardId?: string;
+
+  @ApiPropertyOptional()
+  nameCard?: string;
 }
