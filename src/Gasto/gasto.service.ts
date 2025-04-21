@@ -204,6 +204,210 @@ export class GastoService {
     return { data: paged, total: filtered.length };
   }
 
+  async getChartData(chartType: string, filtros: any, userId: number) {
+    if (chartType === 'line') {
+      // Ejemplo: evolución mensual
+      const year = filtros.anio || new Date().getFullYear();
+      const query = this.gastoRepo
+        .createQueryBuilder('gasto')
+        .where('gasto.usuarioId = :userId', { userId })
+        .andWhere('YEAR(gasto.fecha) = :year', { year });
+
+      if (filtros.categoria) query.andWhere('gasto.categoria = :categoria', { categoria: filtros.categoria });
+      if (filtros.tarjeta) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: filtros.tarjeta });
+
+      const rows = await query
+        .select(['MONTH(gasto.fecha) as mes', 'SUM(gasto.monto) as total'])
+        .groupBy('mes')
+        .orderBy('mes', 'ASC')
+        .getRawMany();
+
+      const meses = [
+        'Enero',
+        'Febrero',
+        'Marzo',
+        'Abril',
+        'Mayo',
+        'Junio',
+        'Julio',
+        'Agosto',
+        'Septiembre',
+        'Octubre',
+        'Noviembre',
+        'Diciembre',
+      ];
+      const data = new Array(12).fill(0);
+      rows.forEach((r) => {
+        data[+r.mes - 1] = +r.total;
+      });
+
+      return {
+        chartData: {
+          labels: meses,
+          datasets: [{ data, label: 'Total Gastado', borderColor: '#1976d2', backgroundColor: '#90caf9' }],
+        },
+        chartOptions: { responsive: true },
+      };
+    }
+    if (chartType === 'doughnut') {
+      const year = filtros.anio || new Date().getFullYear();
+      const month = filtros.mes;
+      const categorias = filtros.categoria; // puede ser undefined o array
+      const tarjetaId = filtros.tarjeta; // id de la tarjeta actual
+
+      const query = this.gastoRepo
+        .createQueryBuilder('gasto')
+        .leftJoin('gasto.categoria', 'categoria')
+        .where('gasto.usuarioId = :userId', { userId })
+        .andWhere('YEAR(gasto.fecha) = :year', { year });
+
+      // Filtra por la tarjeta de crédito seleccionada
+      if (tarjetaId) {
+        query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
+      }
+
+      if (month) query.andWhere('MONTH(gasto.fecha) = :month', { month });
+
+      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      }
+
+      // Agrupa por categoría
+      const rows = await query
+        .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+        .groupBy('categoria.nombre')
+        .orderBy('total', 'DESC')
+        .getRawMany();
+
+      const labels = rows.map((r) => r.categoria || 'Sin categoría');
+      const data = rows.map((r) => Number(r.total));
+
+      return {
+        chartData: {
+          labels,
+          datasets: [
+            {
+              data,
+              backgroundColor: [
+                '#1976d2',
+                '#388e3c',
+                '#fbc02d',
+                '#d32f2f',
+                '#7b1fa2',
+                '#0288d1',
+                '#c2185b',
+                '#ffa000',
+                '#388e3c',
+              ].slice(0, labels.length),
+            },
+          ],
+        },
+        chartOptions: {
+          responsive: true,
+          plugins: {
+            legend: { display: true, position: 'right' },
+            tooltip: {
+              callbacks: {
+                label: (ctx: any) => {
+                  const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                  const value = ctx.dataset.data[ctx.dataIndex];
+                  const pct = total ? ((value / total) * 100).toFixed(1) : 0;
+                  return `${ctx.label}: $${value} (${pct}%)`;
+                },
+              },
+            },
+          },
+        },
+      };
+    }
+    if (chartType === 'bar') {
+      const year = filtros.anio || new Date().getFullYear();
+      const month = filtros.mes;
+      const categorias = filtros.categoria; // puede ser undefined o array
+      const tarjetaId = filtros.tarjeta;
+
+      const query = this.gastoRepo
+        .createQueryBuilder('gasto')
+        .leftJoin('gasto.categoria', 'categoria')
+        .where('gasto.usuarioId = :userId', { userId })
+        .andWhere('YEAR(gasto.fecha) = :year', { year });
+
+      if (tarjetaId) {
+        query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
+      }
+
+      if (month) query.andWhere('MONTH(gasto.fecha) = :month', { month });
+
+      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      }
+
+      // Agrupa por categoría
+      const rows = await query
+        .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+        .groupBy('categoria.nombre')
+        .orderBy('total', 'DESC')
+        .getRawMany();
+
+      const labels = rows.map((r) => r.categoria || 'Sin categoría');
+      const data = rows.map((r) => Number(r.total));
+
+      return {
+        chartData: {
+          labels,
+          datasets: [
+            {
+              data,
+              label: 'Gastos por Categoría',
+              backgroundColor: [
+                '#1976d2',
+                '#388e3c',
+                '#fbc02d',
+                '#d32f2f',
+                '#7b1fa2',
+                '#0288d1',
+                '#c2185b',
+                '#ffa000',
+                '#388e3c',
+              ].slice(0, labels.length),
+              borderColor: [
+                '#1976d2',
+                '#388e3c',
+                '#fbc02d',
+                '#d32f2f',
+                '#7b1fa2',
+                '#0288d1',
+                '#c2185b',
+                '#ffa000',
+                '#388e3c',
+              ].slice(0, labels.length),
+              borderWidth: 1,
+            },
+          ],
+        },
+        chartOptions: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx: any) => {
+                  return `$${ctx.parsed.y ?? ctx.parsed.x}`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { display: true, grid: { display: false, drawBorder: false } },
+            y: { display: true, grid: { display: false, drawBorder: false }, beginAtZero: true },
+          },
+        },
+      };
+    }
+    // ...otros tipos de gráfico...
+    return { chartData: { labels: [], datasets: [] }, chartOptions: { responsive: true } };
+  }
+
   private mapToResponseDto = (gasto: Gasto): any => ({
     id: gasto.id,
     monto: gasto.monto,

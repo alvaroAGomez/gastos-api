@@ -43,6 +43,11 @@ export class GastoController {
     return this.gastoService.gastosPorTarjeta(tarjetaId, user.id, filtros);
   }
 
+  @Post('charts/:chartType')
+  async getChartData(@Param('chartType') chartType: string, @Body() filtros: any, @CurrentUser() user: Usuario) {
+    return this.gastoService.getChartData(chartType, filtros, user.id);
+  }
+
   @Put(':id')
   @ApiOperation({ summary: 'Actualizar un gasto por id' })
   update(
