@@ -208,13 +208,22 @@ export class GastoService {
     if (chartType === 'line') {
       // Ejemplo: evolución mensual
       const year = filtros.anio || new Date().getFullYear();
+      const categorias = filtros.categoria; // puede ser undefined, string o array
+      const tarjetaId = filtros.tarjeta;
+
       const query = this.gastoRepo
         .createQueryBuilder('gasto')
         .where('gasto.usuarioId = :userId', { userId })
         .andWhere('YEAR(gasto.fecha) = :year', { year });
 
-      if (filtros.categoria) query.andWhere('gasto.categoria = :categoria', { categoria: filtros.categoria });
-      if (filtros.tarjeta) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: filtros.tarjeta });
+      // Soporta múltiples categorías (array) o una sola (string/number)
+      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      } else if (categorias) {
+        query.andWhere('gasto.categoria = :categoria', { categoria: categorias });
+      }
+
+      if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: tarjetaId });
 
       const rows = await query
         .select(['MONTH(gasto.fecha) as mes', 'SUM(gasto.monto) as total'])
