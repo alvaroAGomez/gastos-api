@@ -15,6 +15,20 @@ export class CategoriaService {
   ) {}
 
   async create(dto: CreateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
+    // Validar unicidad (no case sensitive)
+    const exists = await this.categoriaGastoRepository
+      .createQueryBuilder('categoriaGasto')
+      .where('LOWER(categoriaGasto.nombre) = LOWER(:nombre)', { nombre: dto.nombre.trim() })
+      .andWhere('(categoriaGasto.usuarioId = :usuarioId OR categoriaGasto.usuarioId IS NULL)', {
+        usuarioId: usuario.id,
+      })
+      .andWhere('categoriaGasto.deletedAt IS NULL')
+      .getOne();
+
+    if (exists) {
+      throw new Error('Ya existe una categoría con ese nombre');
+    }
+
     const categoriaGasto = this.categoriaGastoRepository.create({
       nombre: dto.nombre,
       descripcion: dto.descripcion ?? null,
@@ -31,10 +45,27 @@ export class CategoriaService {
   }
 
   async findAllForUser(usuario: Usuario): Promise<CategoriaResponseDto[]> {
+    // Solo categorías del usuario (sin globales)
     const categories = await this.categoriaGastoRepository
       .createQueryBuilder('categoriaGasto')
       .leftJoinAndSelect('categoriaGasto.usuario', 'usuario')
-      .where('(usuario.id = :usuarioId OR categoriaGasto.usuario IS NULL)', { usuarioId: usuario.id })
+      .where('usuario.id = :usuarioId', { usuarioId: usuario.id })
+      .andWhere('categoriaGasto.deletedAt IS NULL')
+      .getMany();
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      usuarioId: cat.usuario ? cat.usuario.id : null,
+    }));
+  }
+
+  async findAllForUserAndGlobal(usuario: Usuario): Promise<CategoriaResponseDto[]> {
+    // Categorías del usuario + globales
+    const categories = await this.categoriaGastoRepository
+      .createQueryBuilder('categoriaGasto')
+      .leftJoinAndSelect('categoriaGasto.usuario', 'usuario')
+      .where('usuario.id = :usuarioId OR categoriaGasto.usuario IS NULL', { usuarioId: usuario.id })
       .andWhere('categoriaGasto.deletedAt IS NULL')
       .getMany();
 
@@ -53,6 +84,23 @@ export class CategoriaService {
 
     if (!categoriaGasto) {
       throw new NotFoundException('Categoría no encontrada');
+    }
+
+    // Validar unicidad si cambia el nombre
+    if (dto.nombre && dto.nombre.trim().toLowerCase() !== categoriaGasto.nombre.trim().toLowerCase()) {
+      const exists = await this.categoriaGastoRepository
+        .createQueryBuilder('categoriaGasto')
+        .where('LOWER(categoriaGasto.nombre) = LOWER(:nombre)', { nombre: dto.nombre.trim() })
+        .andWhere('(categoriaGasto.usuarioId = :usuarioId OR categoriaGasto.usuarioId IS NULL)', {
+          usuarioId: usuario.id,
+        })
+        .andWhere('categoriaGasto.deletedAt IS NULL')
+        .andWhere('categoriaGasto.id != :id', { id })
+        .getOne();
+
+      if (exists) {
+        throw new Error('Ya existe una categoría con ese nombre');
+      }
     }
 
     categoriaGasto.nombre = dto.nombre ?? categoriaGasto.nombre;

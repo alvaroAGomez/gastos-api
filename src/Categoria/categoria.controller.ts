@@ -24,6 +24,11 @@ export class CategoriaController {
     return this.categoriesService.findAllForUser(user);
   }
 
+  @Get('all')
+  async findAllUserAndGlobal(@CurrentUser() user: Usuario) {
+    return this.categoriesService.findAllForUserAndGlobal(user);
+  }
+
   @Patch(':id')
   async update(@Param('id') id: number, @Body() dto: UpdateCategoriaDto, @CurrentUser() user: Usuario) {
     return this.categoriesService.update(id, dto, user);
