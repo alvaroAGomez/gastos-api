@@ -8,6 +8,7 @@ import { TarjetaCreditoResponseDto } from './dto/tarjeta-credito-response.dto';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
+import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
 
 @ApiTags('Tarjeta Crédito')
 @UseGuards(AuthGuard('jwt'))
@@ -35,6 +36,13 @@ export class TarjetaCreditoController {
   @ApiResponse({ status: 200, type: TarjetaCreditoDetalleDto })
   obtenerDetalle(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
     return this.service.obtenerDetalleTarjeta(id, user.id);
+  }
+
+  @Get('resumen')
+  @ApiOperation({ summary: 'Resumen de todas las tarjetas del usuario' })
+  @ApiResponse({ status: 200, type: [TarjetaCreditoResumenDto] })
+  obtenerResumenTarjetas(@CurrentUser() user: Usuario) {
+    return this.service.obtenerResumenTarjetasPorUsuario(user.id);
   }
 
   @Put(':id')

@@ -8,6 +8,7 @@ import { Banco } from 'src/Banco/banco.entity';
 import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { Cuota } from 'src/Cuota/cuota.entity';
+import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
 
 @Injectable()
 export class TarjetaCreditoService {
@@ -154,5 +155,58 @@ export class TarjetaCreditoService {
       totalConsumosPendientes,
       limiteDisponible,
     };
+  }
+
+  async obtenerResumenTarjetasPorUsuario(usuarioId: number): Promise<TarjetaCreditoResumenDto[]> {
+    const tarjetas = await this.tarjetaRepo.find({
+      where: { usuario: { id: usuarioId }, deletedAt: null },
+      relations: ['banco'],
+      order: { nombreTarjeta: 'ASC' },
+    });
+
+    const now = new Date();
+    const mes = now.getMonth() + 1;
+    const anio = now.getFullYear();
+
+    const resumenes: TarjetaCreditoResumenDto[] = [];
+
+    for (const tarjeta of tarjetas) {
+      // Gasto actual mensual
+      const gastoActual = await this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .innerJoin('cuota.gasto', 'gasto')
+        .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId: tarjeta.id })
+        .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
+        .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
+        .select('SUM(cuota.montoCuota)', 'total')
+        .getRawOne();
+
+      // Total consumos pendientes
+      const totalPendiente = await this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .innerJoin('cuota.gasto', 'gasto')
+        .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId: tarjeta.id })
+        .andWhere('cuota.pagada = false')
+        .andWhere('cuota.fechaVencimiento >= :hoy', { hoy: now })
+        .select('SUM(cuota.montoCuota)', 'total')
+        .getRawOne();
+
+      const gastoActualMensual = +(gastoActual?.total || 0);
+      const totalConsumosPendientes = +(totalPendiente?.total || 0);
+      const limiteDisponible = +(tarjeta.limiteCredito - totalConsumosPendientes);
+
+      resumenes.push({
+        tarjetaId: tarjeta.id,
+        nombreTarjeta: tarjeta.nombreTarjeta,
+        banco: tarjeta.banco?.nombre ?? '',
+        ultimos4: (tarjeta.numeroTarjeta || '').slice(-4),
+        gastoActualMensual,
+        totalConsumosPendientes,
+        limiteDisponible,
+        limiteTotal: tarjeta.limiteCredito,
+      });
+    }
+
+    return resumenes;
   }
 }

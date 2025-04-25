@@ -11,6 +11,7 @@ import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { CuotaService } from 'src/Cuota/cuota.service';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
+import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 
 @Injectable()
 export class GastoService {
@@ -415,6 +416,25 @@ export class GastoService {
     }
     // ...otros tipos de gráfico...
     return { chartData: { labels: [], datasets: [] }, chartOptions: { responsive: true } };
+  }
+
+  async findAllDashboard(userId: number): Promise<GastoDashboardDto[]> {
+    const gastos = await this.gastoRepo.find({
+      where: { usuario: { id: userId } },
+      relations: ['categoria', 'tarjetaCredito'],
+      order: { fecha: 'DESC' },
+    });
+
+    return gastos
+      .filter((g) => g.tarjetaCredito) // Solo gastos con tarjeta de crédito
+      .map((g) => ({
+        id: g.id,
+        tarjeta: g.tarjetaCredito?.nombreTarjeta ?? '',
+        categoria: g.categoria?.nombre ?? '',
+        monto: g.monto,
+        fecha: g.fecha,
+        descripcion: g.descripcion,
+      }));
   }
 
   private mapToResponseDto = (gasto: Gasto): any => ({

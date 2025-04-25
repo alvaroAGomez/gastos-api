@@ -8,6 +8,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
+import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 
 @ApiTags('Gastos')
 @ApiBearerAuth()
@@ -46,6 +47,11 @@ export class GastoController {
   @Post('charts/:chartType')
   async getChartData(@Param('chartType') chartType: string, @Body() filtros: any, @CurrentUser() user: Usuario) {
     return this.gastoService.getChartData(chartType, filtros, user.id);
+  }
+
+  @Get('dashboard/tarjetas')
+  async findAllDashboard(@CurrentUser() user: Usuario): Promise<GastoDashboardDto[]> {
+    return this.gastoService.findAllDashboard(user.id);
   }
 
   @Put(':id')
