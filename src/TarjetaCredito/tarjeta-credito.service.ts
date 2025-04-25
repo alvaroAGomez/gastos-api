@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TarjetaCredito } from './tarjeta-credito.entity';
@@ -26,6 +26,22 @@ export class TarjetaCreditoService {
     const banco = await this.bancoRepo.findOneBy({ id: dto.bancoId });
 
     if (!usuario || !banco) throw new NotFoundException('Usuario o banco no encontrado');
+
+    // Validación de duplicados
+    const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
+    const nombreLower = (dto.nombreTarjeta || '').trim().toLowerCase();
+    const existe = await this.tarjetaRepo
+      .createQueryBuilder('tarjeta')
+      .where('tarjeta.usuarioId = :usuarioId', { usuarioId: usuario.id })
+      .andWhere('tarjeta.bancoId = :bancoId', { bancoId: dto.bancoId })
+      .andWhere('LOWER(TRIM(tarjeta.nombreTarjeta)) = :nombre', { nombre: nombreLower })
+      .andWhere('RIGHT(tarjeta.numeroTarjeta, 4) = :ultimos4', { ultimos4 })
+      .andWhere('tarjeta.deletedAt IS NULL')
+      .getOne();
+
+    if (existe) {
+      throw new BadRequestException('Ya existe una tarjeta con el mismo banco, nombre y últimos 4 dígitos');
+    }
 
     const tarjeta = this.tarjetaRepo.create({
       ...dto,
@@ -57,6 +73,23 @@ export class TarjetaCreditoService {
     });
 
     if (!tarjeta) throw new NotFoundException('Tarjeta no encontrada');
+
+    // Validación de duplicados (excluyendo la tarjeta actual)
+    const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
+    const nombreLower = (dto.nombreTarjeta || '').trim().toLowerCase();
+    const existe = await this.tarjetaRepo
+      .createQueryBuilder('tarjeta')
+      .where('tarjeta.usuarioId = :usuarioId', { usuarioId })
+      .andWhere('tarjeta.bancoId = :bancoId', { bancoId: dto.bancoId })
+      .andWhere('LOWER(TRIM(tarjeta.nombreTarjeta)) = :nombre', { nombre: nombreLower })
+      .andWhere('RIGHT(tarjeta.numeroTarjeta, 4) = :ultimos4', { ultimos4 })
+      .andWhere('tarjeta.id != :id', { id })
+      .andWhere('tarjeta.deletedAt IS NULL')
+      .getOne();
+
+    if (existe) {
+      throw new BadRequestException('Ya existe una tarjeta con el mismo banco, nombre y últimos 4 dígitos');
+    }
 
     Object.assign(tarjeta, {
       ...dto,
