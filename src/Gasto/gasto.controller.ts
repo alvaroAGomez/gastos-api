@@ -49,6 +49,21 @@ export class GastoController {
     return this.gastoService.getChartData(chartType, filtros, user.id);
   }
 
+  @Get('charts/doughnut-category')
+  async getDoughnutCategoryChart(@CurrentUser() user: Usuario) {
+    return this.gastoService.getDoughnutCategoryData(user.id);
+  }
+
+  @Get('charts/bar-monthly-evolution')
+  async getBarMonthlyEvolutionChart(@CurrentUser() user: Usuario) {
+    return this.gastoService.getBarMonthlyEvolutionData(user.id);
+  }
+
+  @Get('charts/pie-card-distribution')
+  async getPieCardDistributionChart(@CurrentUser() user: Usuario) {
+    return this.gastoService.getPieCardDistributionData(user.id);
+  }
+
   @Get('dashboard/tarjetas')
   async findAllDashboard(@CurrentUser() user: Usuario): Promise<GastoDashboardDto[]> {
     return this.gastoService.findAllDashboard(user.id);

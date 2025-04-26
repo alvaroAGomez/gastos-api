@@ -437,6 +437,137 @@ export class GastoService {
       }));
   }
 
+  async getDoughnutCategoryData(userId: number): Promise<{ chartData: any }> {
+    const now = new Date();
+    const mes = now.getMonth() + 1;
+    const anio = now.getFullYear();
+
+    const rows = await this.gastoRepo
+      .createQueryBuilder('gasto')
+      .leftJoin('gasto.categoria', 'categoria')
+      .where('gasto.usuarioId = :userId', { userId })
+      .andWhere('MONTH(gasto.fecha) = :mes', { mes })
+      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
+      .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+      .groupBy('categoria.nombre')
+      .orderBy('total', 'DESC')
+      .getRawMany();
+
+    const labels = rows.map((r) => r.categoria || 'Sin categoría');
+    const data = rows.map((r) => Number(r.total));
+
+    return {
+      chartData: {
+        labels,
+        datasets: [
+          {
+            data,
+            backgroundColor: [
+              '#1976d2',
+              '#388e3c',
+              '#fbc02d',
+              '#d32f2f',
+              '#7b1fa2',
+              '#0288d1',
+              '#c2185b',
+              '#ffa000',
+              '#388e3c',
+            ].slice(0, labels.length),
+          },
+        ],
+      },
+    };
+  }
+
+  async getBarMonthlyEvolutionData(userId: number): Promise<{ chartData: any }> {
+    const now = new Date();
+    const anio = now.getFullYear();
+
+    const rows = await this.gastoRepo
+      .createQueryBuilder('gasto')
+      .where('gasto.usuarioId = :userId', { userId })
+      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
+      .select(['MONTH(gasto.fecha) as mes', 'SUM(gasto.monto) as total'])
+      .groupBy('mes')
+      .orderBy('mes', 'ASC')
+      .getRawMany();
+
+    const meses = [
+      'Enero',
+      'Febrero',
+      'Marzo',
+      'Abril',
+      'Mayo',
+      'Junio',
+      'Julio',
+      'Agosto',
+      'Septiembre',
+      'Octubre',
+      'Noviembre',
+      'Diciembre',
+    ];
+    const data = new Array(12).fill(0);
+    rows.forEach((r) => {
+      data[+r.mes - 1] = +r.total;
+    });
+
+    return {
+      chartData: {
+        labels: meses,
+        datasets: [
+          {
+            data,
+            label: 'Total Gastado',
+            backgroundColor: '#1976d2',
+            borderRadius: 8,
+          },
+        ],
+      },
+    };
+  }
+
+  async getPieCardDistributionData(userId: number): Promise<{ chartData: any }> {
+    const now = new Date();
+    const mes = now.getMonth() + 1;
+    const anio = now.getFullYear();
+
+    const rows = await this.gastoRepo
+      .createQueryBuilder('gasto')
+      .leftJoin('gasto.tarjetaCredito', 'tarjeta')
+      .where('gasto.usuarioId = :userId', { userId })
+      .andWhere('MONTH(gasto.fecha) = :mes', { mes })
+      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
+      .select(['tarjeta.nombreTarjeta as tarjeta', 'SUM(gasto.monto) as total'])
+      .groupBy('tarjeta.nombreTarjeta')
+      .orderBy('total', 'DESC')
+      .getRawMany();
+
+    const labels = rows.map((r) => r.tarjeta || 'Sin tarjeta');
+    const data = rows.map((r) => Number(r.total));
+
+    return {
+      chartData: {
+        labels,
+        datasets: [
+          {
+            data,
+            backgroundColor: [
+              '#1976d2',
+              '#388e3c',
+              '#fbc02d',
+              '#d32f2f',
+              '#7b1fa2',
+              '#0288d1',
+              '#c2185b',
+              '#ffa000',
+              '#388e3c',
+            ].slice(0, labels.length),
+          },
+        ],
+      },
+    };
+  }
+
   private mapToResponseDto = (gasto: Gasto): any => ({
     id: gasto.id,
     monto: gasto.monto,
