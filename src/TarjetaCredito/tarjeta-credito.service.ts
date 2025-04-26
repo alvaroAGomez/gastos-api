@@ -193,7 +193,7 @@ export class TarjetaCreditoService {
 
       const gastoActualMensual = +(gastoActual?.total || 0);
       const totalConsumosPendientes = +(totalPendiente?.total || 0);
-      const limiteDisponible = +(tarjeta.limiteCredito - totalConsumosPendientes);
+      const limiteDisponible = tarjeta.limiteCredito - gastoActualMensual - totalConsumosPendientes;
 
       resumenes.push({
         tarjetaId: tarjeta.id,
