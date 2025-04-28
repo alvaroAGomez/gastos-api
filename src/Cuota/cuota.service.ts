@@ -16,6 +16,21 @@ export class CuotaService {
     private readonly cuotaRepo: Repository<Cuota>
   ) {}
 
+  private readonly MESES = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
   async generarCuotas(gasto: Gasto): Promise<void> {
     if (!gasto.totalCuotas || gasto.totalCuotas <= 0) return;
 
@@ -81,20 +96,7 @@ export class CuotaService {
     const resumenPorTarjeta: CuotaResumenAnualResponseDto['resumenPorTarjeta'] = [];
     const tarjetasMap = new Map<number, CuotaResumenTarjetaDto>();
 
-    const meses = [
-      'enero',
-      'febrero',
-      'marzo',
-      'abril',
-      'mayo',
-      'junio',
-      'julio',
-      'agosto',
-      'septiembre',
-      'octubre',
-      'noviembre',
-      'diciembre',
-    ];
+    const meses = this.MESES;
 
     for (const cuota of cuotas) {
       const { tarjetaId, nombreTarjeta, banco, mes, totalCuotas } = cuota;
@@ -191,20 +193,7 @@ export class CuotaService {
 
   async obtenerResumenGeneralAnual(usuario: Usuario, anio?: number): Promise<CuotaResumenGeneralResponseDto> {
     const year = anio || new Date().getFullYear();
-    const meses = [
-      'enero',
-      'febrero',
-      'marzo',
-      'abril',
-      'mayo',
-      'junio',
-      'julio',
-      'agosto',
-      'septiembre',
-      'octubre',
-      'noviembre',
-      'diciembre',
-    ];
+    const meses = this.MESES;
 
     // Sumar todas las cuotas de todas las tarjetas por mes
     const rows = await this.cuotaRepo
@@ -237,20 +226,7 @@ export class CuotaService {
     anio?: number
   ): Promise<CuotaResumenTarjetaDetalladoResponseDto> {
     const year = anio || new Date().getFullYear();
-    const meses = [
-      'enero',
-      'febrero',
-      'marzo',
-      'abril',
-      'mayo',
-      'junio',
-      'julio',
-      'agosto',
-      'septiembre',
-      'octubre',
-      'noviembre',
-      'diciembre',
-    ];
+    const meses = this.MESES;
 
     // Traer todas las cuotas de la tarjeta para el año
     const cuotas = await this.cuotaRepo

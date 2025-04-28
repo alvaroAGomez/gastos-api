@@ -111,19 +111,10 @@ export class TarjetaCreditoService {
     await this.tarjetaRepo.softRemove(tarjeta);
   }
 
-  async obtenerDetalleTarjeta(tarjetaId: number, usuarioId: number): Promise<TarjetaCreditoDetalleDto> {
-    const tarjeta = await this.tarjetaRepo.findOne({
-      where: { id: tarjetaId, usuario: { id: usuarioId }, deletedAt: null },
-      relations: ['banco'],
-    });
-    if (!tarjeta) throw new NotFoundException('Tarjeta no encontrada');
-
-    // Gasto actual mensual: suma de cuotas de este mes y año
-    const now = new Date();
-    const mes = now.getMonth() + 1;
-    const anio = now.getFullYear();
-
-    const gastoActual = await this.cuotaRepo
+  private async getGastoActualMensual(tarjetaId: number, fecha: Date): Promise<number> {
+    const mes = fecha.getMonth() + 1;
+    const anio = fecha.getFullYear();
+    const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
       .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
@@ -131,19 +122,31 @@ export class TarjetaCreditoService {
       .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
       .select('SUM(cuota.montoCuota)', 'total')
       .getRawOne();
+    return +(result?.total || 0);
+  }
 
-    // Total consumos pendientes: suma de todas las cuotas no pagadas desde hoy en adelante
-    const totalPendiente = await this.cuotaRepo
+  private async getTotalConsumosPendientes(tarjetaId: number, fechaDesde: Date): Promise<number> {
+    const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
       .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
       .andWhere('cuota.pagada = false')
-      .andWhere('cuota.fechaVencimiento >= :hoy', { hoy: new Date() })
+      .andWhere('cuota.fechaVencimiento >= :hoy', { hoy: fechaDesde })
       .select('SUM(cuota.montoCuota)', 'total')
       .getRawOne();
+    return +(result?.total || 0);
+  }
 
-    const gastoActualMensual = +(gastoActual?.total || 0);
-    const totalConsumosPendientes = +(totalPendiente?.total || 0);
+  async obtenerDetalleTarjeta(tarjetaId: number, usuarioId: number): Promise<TarjetaCreditoDetalleDto> {
+    const tarjeta = await this.tarjetaRepo.findOne({
+      where: { id: tarjetaId, usuario: { id: usuarioId }, deletedAt: null },
+      relations: ['banco'],
+    });
+    if (!tarjeta) throw new NotFoundException('Tarjeta no encontrada');
+
+    const now = new Date();
+    const gastoActualMensual = await this.getGastoActualMensual(tarjetaId, now);
+    const totalConsumosPendientes = await this.getTotalConsumosPendientes(tarjetaId, now);
     const limiteDisponible = +(tarjeta.limiteCredito - totalConsumosPendientes);
 
     return {
@@ -165,34 +168,11 @@ export class TarjetaCreditoService {
     });
 
     const now = new Date();
-    const mes = now.getMonth() + 1;
-    const anio = now.getFullYear();
 
     const resumenes: TarjetaCreditoResumenDto[] = [];
-
     for (const tarjeta of tarjetas) {
-      // Gasto actual mensual
-      const gastoActual = await this.cuotaRepo
-        .createQueryBuilder('cuota')
-        .innerJoin('cuota.gasto', 'gasto')
-        .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId: tarjeta.id })
-        .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
-        .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
-        .select('SUM(cuota.montoCuota)', 'total')
-        .getRawOne();
-
-      // Total consumos pendientes
-      const totalPendiente = await this.cuotaRepo
-        .createQueryBuilder('cuota')
-        .innerJoin('cuota.gasto', 'gasto')
-        .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId: tarjeta.id })
-        .andWhere('cuota.pagada = false')
-        .andWhere('cuota.fechaVencimiento >= :hoy', { hoy: now })
-        .select('SUM(cuota.montoCuota)', 'total')
-        .getRawOne();
-
-      const gastoActualMensual = +(gastoActual?.total || 0);
-      const totalConsumosPendientes = +(totalPendiente?.total || 0);
+      const gastoActualMensual = await this.getGastoActualMensual(tarjeta.id, now);
+      const totalConsumosPendientes = await this.getTotalConsumosPendientes(tarjeta.id, now);
       const limiteDisponible = tarjeta.limiteCredito - gastoActualMensual - totalConsumosPendientes;
 
       resumenes.push({

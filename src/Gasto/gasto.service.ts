@@ -24,6 +24,33 @@ export class GastoService {
     private readonly cuotaService: CuotaService
   ) {}
 
+  private readonly MESES = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+  ];
+
+  private readonly COLORS = [
+    '#1976d2',
+    '#388e3c',
+    '#fbc02d',
+    '#d32f2f',
+    '#7b1fa2',
+    '#0288d1',
+    '#c2185b',
+    '#ffa000',
+    '#388e3c',
+  ];
+
   async create(dto: CreateGastoDto, userId: number): Promise<GastoResponseDto> {
     // Validación: no se puede asociar a ambas tarjetas
     if (dto.tarjetaCreditoId && dto.tarjetaDebitoId) {
@@ -232,20 +259,7 @@ export class GastoService {
         .orderBy('mes', 'ASC')
         .getRawMany();
 
-      const meses = [
-        'Enero',
-        'Febrero',
-        'Marzo',
-        'Abril',
-        'Mayo',
-        'Junio',
-        'Julio',
-        'Agosto',
-        'Septiembre',
-        'Octubre',
-        'Noviembre',
-        'Diciembre',
-      ];
+      const meses = this.MESES;
       const data = new Array(12).fill(0);
       rows.forEach((r) => {
         data[+r.mes - 1] = +r.total;
@@ -298,17 +312,7 @@ export class GastoService {
           datasets: [
             {
               data,
-              backgroundColor: [
-                '#1976d2',
-                '#388e3c',
-                '#fbc02d',
-                '#d32f2f',
-                '#7b1fa2',
-                '#0288d1',
-                '#c2185b',
-                '#ffa000',
-                '#388e3c',
-              ].slice(0, labels.length),
+              backgroundColor: this.COLORS.slice(0, labels.length),
             },
           ],
         },
@@ -369,28 +373,8 @@ export class GastoService {
             {
               data,
               label: 'Gastos por Categoría',
-              backgroundColor: [
-                '#1976d2',
-                '#388e3c',
-                '#fbc02d',
-                '#d32f2f',
-                '#7b1fa2',
-                '#0288d1',
-                '#c2185b',
-                '#ffa000',
-                '#388e3c',
-              ].slice(0, labels.length),
-              borderColor: [
-                '#1976d2',
-                '#388e3c',
-                '#fbc02d',
-                '#d32f2f',
-                '#7b1fa2',
-                '#0288d1',
-                '#c2185b',
-                '#ffa000',
-                '#388e3c',
-              ].slice(0, labels.length),
+              backgroundColor: this.COLORS.slice(0, labels.length),
+              borderColor: this.COLORS.slice(0, labels.length),
               borderWidth: 1,
             },
           ],
@@ -462,17 +446,7 @@ export class GastoService {
         datasets: [
           {
             data,
-            backgroundColor: [
-              '#1976d2',
-              '#388e3c',
-              '#fbc02d',
-              '#d32f2f',
-              '#7b1fa2',
-              '#0288d1',
-              '#c2185b',
-              '#ffa000',
-              '#388e3c',
-            ].slice(0, labels.length),
+            backgroundColor: this.COLORS.slice(0, labels.length),
           },
         ],
       },
@@ -492,20 +466,7 @@ export class GastoService {
       .orderBy('mes', 'ASC')
       .getRawMany();
 
-    const meses = [
-      'Enero',
-      'Febrero',
-      'Marzo',
-      'Abril',
-      'Mayo',
-      'Junio',
-      'Julio',
-      'Agosto',
-      'Septiembre',
-      'Octubre',
-      'Noviembre',
-      'Diciembre',
-    ];
+    const meses = this.MESES;
     const data = new Array(12).fill(0);
     rows.forEach((r) => {
       data[+r.mes - 1] = +r.total;
@@ -551,17 +512,7 @@ export class GastoService {
         datasets: [
           {
             data,
-            backgroundColor: [
-              '#1976d2',
-              '#388e3c',
-              '#fbc02d',
-              '#d32f2f',
-              '#7b1fa2',
-              '#0288d1',
-              '#c2185b',
-              '#ffa000',
-              '#388e3c',
-            ].slice(0, labels.length),
+            backgroundColor: this.COLORS.slice(0, labels.length),
           },
         ],
       },
