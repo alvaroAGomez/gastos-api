@@ -12,6 +12,7 @@ import { Usuario } from 'src/Usuario/usuario.entity';
 import { CuotaService } from 'src/Cuota/cuota.service';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
+import { Cuota } from 'src/Cuota/cuota.entity';
 
 @Injectable()
 export class GastoService {
@@ -21,6 +22,7 @@ export class GastoService {
     @InjectRepository(TarjetaCredito) private creditoRepo: Repository<TarjetaCredito>,
     @InjectRepository(TarjetaDebito) private debitoRepo: Repository<TarjetaDebito>,
     @InjectRepository(Usuario) private usuarioRepo: Repository<Usuario>,
+    @InjectRepository(Cuota) private cuotaRepo: Repository<Cuota>,
     private readonly cuotaService: CuotaService
   ) {}
 
@@ -121,6 +123,11 @@ export class GastoService {
       throw new BadRequestException('No se puede asociar un gasto a tarjeta de crédito y débito al mismo tiempo.');
     }
 
+    // Detectar si cambian fecha, cuotas o monto
+    const fechaAnterior = gasto.fecha;
+    const cuotasAnteriores = gasto.totalCuotas;
+    const montoAnterior = Number(gasto.monto);
+
     if (dto.categoriaGastoId) {
       gasto.categoria = await this.categoriaRepo.findOneByOrFail({ id: dto.categoriaGastoId });
     }
@@ -137,7 +144,7 @@ export class GastoService {
         : null;
     }
 
-    gasto.monto = dto.monto ?? gasto.monto;
+    gasto.monto = typeof dto.monto === 'string' ? Number(dto.monto) : (dto.monto ?? gasto.monto);
     gasto.fecha = dto.fecha ? new Date(dto.fecha) : gasto.fecha;
     gasto.descripcion = dto.descripcion ?? gasto.descripcion;
 
@@ -150,10 +157,18 @@ export class GastoService {
       gasto.totalCuotas = 0;
     }
 
-    await this.cuotaService.eliminarCuotasPorGasto(gasto.id);
+    // Si cambió la fecha, la cantidad de cuotas o el monto, eliminar cuotas viejas y generar nuevas
+    const fechaCambio = dto.fecha && new Date(dto.fecha).getTime() !== new Date(fechaAnterior).getTime();
+    const cuotasCambio = dto.numeroCuotas !== undefined && dto.numeroCuotas !== cuotasAnteriores;
+    const montoCambio = dto.monto !== undefined && Number(dto.monto) !== montoAnterior;
+
+    if (fechaCambio || cuotasCambio || montoCambio) {
+      await this.cuotaService.eliminarCuotasPorGasto(gasto.id);
+    }
+
     const updated = await this.gastoRepo.save(gasto);
 
-    if (gasto.tarjetaCredito && gasto.totalCuotas > 0) {
+    if ((fechaCambio || cuotasCambio || montoCambio) && gasto.tarjetaCredito && gasto.totalCuotas > 0) {
       await this.cuotaService.generarCuotas(updated);
     }
 
@@ -234,17 +249,17 @@ export class GastoService {
 
   async getChartData(chartType: string, filtros: any, userId: number) {
     if (chartType === 'line') {
-      // Ejemplo: evolución mensual
+      // Ahora usamos cuotas para la evolución mensual
       const year = filtros.anio || new Date().getFullYear();
-      const categorias = filtros.categoria; // puede ser undefined, string o array
+      const categorias = filtros.categoria;
       const tarjetaId = filtros.tarjeta;
 
-      const query = this.gastoRepo
-        .createQueryBuilder('gasto')
+      const query = this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .leftJoin('cuota.gasto', 'gasto')
         .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(gasto.fecha) = :year', { year });
+        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
 
-      // Soporta múltiples categorías (array) o una sola (string/number)
       if (categorias && Array.isArray(categorias) && categorias.length > 0) {
         query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
       } else if (categorias) {
@@ -254,7 +269,7 @@ export class GastoService {
       if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: tarjetaId });
 
       const rows = await query
-        .select(['MONTH(gasto.fecha) as mes', 'SUM(gasto.monto) as total'])
+        .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
         .groupBy('mes')
         .orderBy('mes', 'ASC')
         .getRawMany();
@@ -274,31 +289,31 @@ export class GastoService {
       };
     }
     if (chartType === 'doughnut') {
+      // Ahora usamos cuotas para la distribución por categoría
       const year = filtros.anio || new Date().getFullYear();
       const month = filtros.mes;
-      const categorias = filtros.categoria; // puede ser undefined o array
-      const tarjetaId = filtros.tarjeta; // id de la tarjeta actual
+      const categorias = filtros.categoria;
+      const tarjetaId = filtros.tarjeta;
 
-      const query = this.gastoRepo
-        .createQueryBuilder('gasto')
+      const query = this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .leftJoin('cuota.gasto', 'gasto')
         .leftJoin('gasto.categoria', 'categoria')
         .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(gasto.fecha) = :year', { year });
+        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
 
-      // Filtra por la tarjeta de crédito seleccionada
       if (tarjetaId) {
         query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
       }
 
-      if (month) query.andWhere('MONTH(gasto.fecha) = :month', { month });
+      if (month) query.andWhere('MONTH(cuota.fechaVencimiento) = :month', { month });
 
       if (categorias && Array.isArray(categorias) && categorias.length > 0) {
         query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
       }
 
-      // Agrupa por categoría
       const rows = await query
-        .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+        .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
         .groupBy('categoria.nombre')
         .orderBy('total', 'DESC')
         .getRawMany();
@@ -335,30 +350,31 @@ export class GastoService {
       };
     }
     if (chartType === 'bar') {
+      // Ahora usamos cuotas para la barra por categoría
       const year = filtros.anio || new Date().getFullYear();
       const month = filtros.mes;
-      const categorias = filtros.categoria; // puede ser undefined o array
+      const categorias = filtros.categoria;
       const tarjetaId = filtros.tarjeta;
 
-      const query = this.gastoRepo
-        .createQueryBuilder('gasto')
+      const query = this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .leftJoin('cuota.gasto', 'gasto')
         .leftJoin('gasto.categoria', 'categoria')
         .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(gasto.fecha) = :year', { year });
+        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
 
       if (tarjetaId) {
         query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
       }
 
-      if (month) query.andWhere('MONTH(gasto.fecha) = :month', { month });
+      if (month) query.andWhere('MONTH(cuota.fechaVencimiento) = :month', { month });
 
       if (categorias && Array.isArray(categorias) && categorias.length > 0) {
         query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
       }
 
-      // Agrupa por categoría
       const rows = await query
-        .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+        .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
         .groupBy('categoria.nombre')
         .orderBy('total', 'DESC')
         .getRawMany();
@@ -405,7 +421,7 @@ export class GastoService {
   async findAllDashboard(userId: number): Promise<GastoDashboardDto[]> {
     const gastos = await this.gastoRepo.find({
       where: { usuario: { id: userId } },
-      relations: ['categoria', 'tarjetaCredito'],
+      relations: ['categoria', 'tarjetaCredito', 'tarjetaDebito'],
       order: { fecha: 'DESC' },
     });
 
@@ -418,6 +434,12 @@ export class GastoService {
         monto: g.monto,
         fecha: g.fecha,
         descripcion: g.descripcion,
+        // --- datos para edición ---
+        categoriaGastoId: g.categoria?.id ?? null,
+        tarjetaCreditoId: g.tarjetaCredito?.id ?? null,
+        tarjetaDebitoId: g.tarjetaDebito?.id ?? null,
+        cuotas: g.totalCuotas,
+        esEnCuotas: g.esEnCuotas,
       }));
   }
 
@@ -426,13 +448,14 @@ export class GastoService {
     const mes = now.getMonth() + 1;
     const anio = now.getFullYear();
 
-    const rows = await this.gastoRepo
-      .createQueryBuilder('gasto')
+    const rows = await this.cuotaRepo
+      .createQueryBuilder('cuota')
+      .leftJoin('cuota.gasto', 'gasto')
       .leftJoin('gasto.categoria', 'categoria')
       .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('MONTH(gasto.fecha) = :mes', { mes })
-      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
-      .select(['categoria.nombre as categoria', 'SUM(gasto.monto) as total'])
+      .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
+      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
+      .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
       .groupBy('categoria.nombre')
       .orderBy('total', 'DESC')
       .getRawMany();
@@ -457,11 +480,12 @@ export class GastoService {
     const now = new Date();
     const anio = now.getFullYear();
 
-    const rows = await this.gastoRepo
-      .createQueryBuilder('gasto')
+    const rows = await this.cuotaRepo
+      .createQueryBuilder('cuota')
+      .leftJoin('cuota.gasto', 'gasto')
       .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
-      .select(['MONTH(gasto.fecha) as mes', 'SUM(gasto.monto) as total'])
+      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
+      .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
       .groupBy('mes')
       .orderBy('mes', 'ASC')
       .getRawMany();
@@ -492,13 +516,14 @@ export class GastoService {
     const mes = now.getMonth() + 1;
     const anio = now.getFullYear();
 
-    const rows = await this.gastoRepo
-      .createQueryBuilder('gasto')
+    const rows = await this.cuotaRepo
+      .createQueryBuilder('cuota')
+      .leftJoin('cuota.gasto', 'gasto')
       .leftJoin('gasto.tarjetaCredito', 'tarjeta')
       .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('MONTH(gasto.fecha) = :mes', { mes })
-      .andWhere('YEAR(gasto.fecha) = :anio', { anio })
-      .select(['tarjeta.nombreTarjeta as tarjeta', 'SUM(gasto.monto) as total'])
+      .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
+      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
+      .select(['tarjeta.nombreTarjeta as tarjeta', 'SUM(cuota.montoCuota) as total'])
       .groupBy('tarjeta.nombreTarjeta')
       .orderBy('total', 'DESC')
       .getRawMany();
@@ -525,9 +550,12 @@ export class GastoService {
     fecha: gasto.fecha,
     descripcion: gasto.descripcion,
     categoria: gasto.categoria?.nombre ?? '',
+    categoriaGastoId: gasto.categoria?.id ?? null,
     cuotas: gasto.totalCuotas,
     cuotasRestantes: undefined,
     cardId: gasto.tarjetaCredito?.id?.toString() ?? '',
     nameCard: gasto.tarjetaCredito?.nombreTarjeta ?? '',
+    tarjetaCreditoId: gasto.tarjetaCredito?.id ?? null,
+    tarjetaDebitoId: gasto.tarjetaDebito?.id ?? null,
   });
 }
