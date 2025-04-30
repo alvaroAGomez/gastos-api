@@ -9,6 +9,7 @@ import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { Cuota } from 'src/Cuota/cuota.entity';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
+import { Gasto } from 'src/Gasto/gasto.entity';
 
 @Injectable()
 export class TarjetaCreditoService {
@@ -20,7 +21,9 @@ export class TarjetaCreditoService {
     @InjectRepository(Banco)
     private readonly bancoRepo: Repository<Banco>,
     @InjectRepository(Cuota)
-    private readonly cuotaRepo: Repository<Cuota>
+    private readonly cuotaRepo: Repository<Cuota>,
+    @InjectRepository(Gasto)
+    private readonly gastoRepo: Repository<Gasto>
   ) {}
 
   async crear(dto: CreateTarjetaCreditoDto, usuario: Usuario): Promise<TarjetaCredito> {
@@ -188,5 +191,42 @@ export class TarjetaCreditoService {
     }
 
     return resumenes;
+  }
+
+  // NUEVO: Movimientos recientes de la tarjeta
+  async obtenerMovimientosTarjeta(tarjetaId: number, usuarioId: number) {
+    // Trae los gastos con cuotas pendientes (cuotasRestantes > 0)
+    const now = new Date();
+    const gastos = await this.gastoRepo.find({
+      where: { tarjetaCredito: { id: tarjetaId }, usuario: { id: usuarioId } },
+      relations: ['categoria', 'cuotas'],
+      order: { fecha: 'DESC' },
+    });
+
+    // Solo los que tienen cuotas pendientes
+    const movimientos = gastos
+      .filter((g) => g.esEnCuotas && g.totalCuotas > 0)
+      .map((g) => {
+        // Calcular cuotas pendientes y monto de cada cuota
+        const fechaGasto = new Date(g.fecha);
+        const mesesTranscurridos =
+          (now.getFullYear() - fechaGasto.getFullYear()) * 12 + (now.getMonth() - fechaGasto.getMonth());
+        const cuotasPendientes = Math.max(g.totalCuotas - mesesTranscurridos, 0);
+
+        // Buscar la cuota actual pendiente (la próxima no pagada)
+        const cuotaPendiente = g.cuotas?.find((c) => !c.pagada && new Date(c.fechaVencimiento) >= now);
+        const montoCuota = cuotaPendiente ? Number(cuotaPendiente.montoCuota) : g.monto / g.totalCuotas;
+
+        return {
+          fecha: g.fecha,
+          descripcion: g.descripcion,
+          cuotasPendientes,
+          montoCuota,
+          total: cuotasPendientes * montoCuota,
+        };
+      })
+      .filter((mov) => mov.cuotasPendientes > 0);
+
+    return movimientos;
   }
 }

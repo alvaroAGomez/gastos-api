@@ -45,6 +45,12 @@ export class TarjetaCreditoController {
     return this.service.obtenerResumenTarjetasPorUsuario(user.id);
   }
 
+  @Get(':id/movimientos')
+  @ApiOperation({ summary: 'Movimientos recientes de la tarjeta de crédito' })
+  async obtenerMovimientos(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.service.obtenerMovimientosTarjeta(id, user.id);
+  }
+
   @Put(':id')
   @ApiOperation({ summary: 'Actualizar tarjeta de crédito por ID' })
   @ApiResponse({ status: 200, type: TarjetaCreditoResponseDto })
