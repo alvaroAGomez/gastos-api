@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Cuota } from './cuota.entity';
 import { Repository } from 'typeorm';
+import { Cuota } from './cuota.entity';
 import { Gasto } from 'src/Gasto/gasto.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { CuotaResumenAnualResponseDto, CuotaResumenTarjetaDto } from './dto/cuota-resumen-mensual.dto';
 import { FiltroCuotasDto } from './dto/filtro-cuotas.dto';
 import { CuotaResumenGeneralResponseDto } from './dto/cuota-resumen-general.dto';
 import { CuotaResumenTarjetaDetalladoResponseDto } from './dto/cuota-resumen-tarjeta-detallado.dto';
+import { MESES } from 'src/common/constants/meses.const';
+import { redondear } from 'src/common/utils/math.util';
 
 @Injectable()
 export class CuotaService {
@@ -16,50 +18,40 @@ export class CuotaService {
     private readonly cuotaRepo: Repository<Cuota>
   ) {}
 
-  private readonly MESES = [
-    'enero',
-    'febrero',
-    'marzo',
-    'abril',
-    'mayo',
-    'junio',
-    'julio',
-    'agosto',
-    'septiembre',
-    'octubre',
-    'noviembre',
-    'diciembre',
-  ];
+  // ============================================================================
+  // 📦 CRUD BÁSICO DE CUOTAS
+  // ============================================================================
 
   async generarCuotas(gasto: Gasto): Promise<void> {
     if (!gasto.totalCuotas || gasto.totalCuotas <= 0) return;
 
-    const montoPorCuota = +(gasto.monto / gasto.totalCuotas).toFixed(2);
+    const montoPorCuota = redondear(gasto.monto / gasto.totalCuotas);
     const cuotas: Cuota[] = [];
 
     for (let i = 0; i < gasto.totalCuotas; i++) {
-      const cuota = new Cuota();
-      cuota.gasto = gasto;
-      cuota.numeroCuota = i + 1;
-      cuota.montoCuota = montoPorCuota;
-
       const fecha = new Date(gasto.fecha);
       fecha.setMonth(fecha.getMonth() + i);
-      cuota.fechaVencimiento = fecha;
 
-      cuotas.push(cuota);
+      cuotas.push(
+        this.cuotaRepo.create({
+          gasto,
+          numeroCuota: i + 1,
+          montoCuota: montoPorCuota,
+          fechaVencimiento: fecha,
+        })
+      );
     }
 
     await this.cuotaRepo.save(cuotas);
   }
 
   async eliminarCuotasPorGasto(gastoId: number): Promise<void> {
-    await this.cuotaRepo.delete({ gastoId }); // ✅ esta es la forma correcta
+    await this.cuotaRepo.delete({ gastoId });
   }
 
   async obtenerCuotasPorGasto(gastoId: number): Promise<Cuota[]> {
     return this.cuotaRepo.find({
-      where: { gastoId }, // ✅ también corregido
+      where: { gastoId },
       order: { numeroCuota: 'ASC' },
     });
   }
@@ -68,90 +60,14 @@ export class CuotaService {
     await this.cuotaRepo.update(cuotaId, { pagada: true });
   }
 
-  async obtenerResumenAnual(usuario: Usuario, anio?: number): Promise<CuotaResumenAnualResponseDto> {
-    const year = anio || new Date().getFullYear();
-
-    const cuotas = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
-      .innerJoin('gasto.tarjetaCredito', 'tarjeta')
-      .leftJoin('tarjeta.banco', 'banco')
-      .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio: year })
-      .select([
-        'tarjeta.id AS tarjetaId',
-        'tarjeta.nombre AS nombreTarjeta',
-        'banco.nombre AS banco', // <-- agrega el banco aquí
-        'MONTH(cuota.fechaVencimiento) AS mes',
-        'SUM(cuota.montoCuota) AS totalCuotas',
-      ])
-      .groupBy('tarjeta.id')
-      .addGroupBy('mes')
-      .addGroupBy('tarjeta.nombre')
-      .addGroupBy('banco.nombre')
-      .orderBy('tarjeta.nombre', 'ASC')
-      .addOrderBy('mes', 'ASC')
-      .getRawMany();
-
-    const resumenPorTarjeta: CuotaResumenAnualResponseDto['resumenPorTarjeta'] = [];
-    const tarjetasMap = new Map<number, CuotaResumenTarjetaDto>();
-
-    const meses = this.MESES;
-
-    for (const cuota of cuotas) {
-      const { tarjetaId, nombreTarjeta, banco, mes, totalCuotas } = cuota;
-
-      if (!tarjetasMap.has(tarjetaId)) {
-        tarjetasMap.set(tarjetaId, {
-          tarjetaId,
-          nombreTarjeta,
-          banco, // <-- agrega el banco aquí
-          anio: year,
-          resumenMensual: [],
-          totalAnual: 0,
-        });
-      }
-
-      const resumen = tarjetasMap.get(tarjetaId)!;
-      resumen.resumenMensual.push({
-        mes: meses[mes - 1],
-        totalCuotas: parseFloat(totalCuotas),
-      });
-      resumen.totalAnual += parseFloat(totalCuotas);
-    }
-
-    tarjetasMap.forEach((resumen) => {
-      // completar los meses que falten con 0
-      const mesesCargados = new Set(resumen.resumenMensual.map((m) => m.mes));
-      for (let i = 0; i < 12; i++) {
-        if (!mesesCargados.has(meses[i])) {
-          resumen.resumenMensual.push({
-            mes: meses[i],
-            totalCuotas: 0,
-          });
-        }
-      }
-
-      // ordenar por mes
-      resumen.resumenMensual.sort((a, b) => meses.indexOf(a.mes) - meses.indexOf(b.mes));
-
-      resumen.totalAnual = +resumen.totalAnual.toFixed(2);
-      resumenPorTarjeta.push(resumen);
-    });
-
-    const totalGeneral = +resumenPorTarjeta.reduce((acc, tarjeta) => acc + tarjeta.totalAnual, 0).toFixed(2);
-
-    return { resumenPorTarjeta, totalGeneral };
-  }
+  // ============================================================================
+  // 🔎 BÚSQUEDA / FILTRADO DE CUOTAS
+  // ============================================================================
 
   async buscarCuotas(usuario: Usuario, filtros: FiltroCuotasDto) {
     const { tarjetaId, mes, anio, pagada, page = 1, limit = 10 } = filtros;
 
-    const query = this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
-      .innerJoin('gasto.tarjetaCredito', 'tarjeta')
-      .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id });
+    const query = this.getQueryBaseUsuario(usuario.id).innerJoin('gasto.tarjetaCredito', 'tarjeta');
 
     if (tarjetaId) query.andWhere('tarjeta.id = :tarjetaId', { tarjetaId });
     if (mes) query.andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes });
@@ -167,16 +83,17 @@ export class CuotaService {
     return { data: result, total };
   }
 
+  // ============================================================================
+  // 📊 RESÚMENES DE CUOTAS (MENSUALES Y ANUALES)
+  // ============================================================================
+
   async resumenMensualActual(usuario: Usuario) {
     const now = new Date();
     const mes = now.getMonth() + 1;
     const anio = now.getFullYear();
 
-    const resumen = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
+    const resumen = await this.getQueryBaseUsuario(usuario.id)
       .innerJoin('gasto.tarjetaCredito', 'tarjeta')
-      .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id })
       .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
       .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
       .select(['tarjeta.id AS tarjetaId', 'tarjeta.nombre AS nombreTarjeta', 'SUM(cuota.montoCuota) AS totalMes'])
@@ -187,35 +104,93 @@ export class CuotaService {
     return resumen.map((r) => ({
       tarjetaId: r.tarjetaId,
       nombreTarjeta: r.nombreTarjeta,
-      totalMes: +r.totalMes,
+      totalMes: redondear(r.totalMes),
     }));
+  }
+
+  async obtenerResumenAnual(usuario: Usuario, anio?: number): Promise<CuotaResumenAnualResponseDto> {
+    const year = anio || new Date().getFullYear();
+
+    const cuotas = await this.getQueryBaseUsuario(usuario.id)
+      .innerJoin('gasto.tarjetaCredito', 'tarjeta')
+      .leftJoin('tarjeta.banco', 'banco')
+      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio: year })
+      .select([
+        'tarjeta.id AS tarjetaId',
+        'tarjeta.nombre AS nombreTarjeta',
+        'banco.nombre AS banco',
+        'MONTH(cuota.fechaVencimiento) AS mes',
+        'SUM(cuota.montoCuota) AS totalCuotas',
+      ])
+      .groupBy('tarjeta.id')
+      .addGroupBy('mes')
+      .addGroupBy('tarjeta.nombre')
+      .addGroupBy('banco.nombre')
+      .orderBy('tarjeta.nombre', 'ASC')
+      .addOrderBy('mes', 'ASC')
+      .getRawMany();
+
+    const tarjetasMap = new Map<number, CuotaResumenTarjetaDto>();
+
+    for (const c of cuotas) {
+      const id = +c.tarjetaId;
+      if (!tarjetasMap.has(id)) {
+        tarjetasMap.set(id, {
+          tarjetaId: id,
+          nombreTarjeta: c.nombreTarjeta,
+          banco: c.banco,
+          anio: year,
+          resumenMensual: [],
+          totalAnual: 0,
+        });
+      }
+
+      const tarjeta = tarjetasMap.get(id)!;
+      tarjeta.resumenMensual.push({
+        mes: MESES[c.mes - 1],
+        totalCuotas: redondear(c.totalCuotas),
+      });
+      tarjeta.totalAnual += +c.totalCuotas;
+    }
+
+    const resumenPorTarjeta: CuotaResumenTarjetaDto[] = [];
+
+    for (const tarjeta of tarjetasMap.values()) {
+      const cargados = new Set(tarjeta.resumenMensual.map((m) => m.mes));
+      MESES.forEach((mes) => {
+        if (!cargados.has(mes)) {
+          tarjeta.resumenMensual.push({ mes, totalCuotas: 0 });
+        }
+      });
+      tarjeta.resumenMensual.sort((a, b) => MESES.indexOf(a.mes) - MESES.indexOf(b.mes));
+      tarjeta.totalAnual = redondear(tarjeta.totalAnual);
+      resumenPorTarjeta.push(tarjeta);
+    }
+
+    const totalGeneral = redondear(resumenPorTarjeta.reduce((acc, t) => acc + t.totalAnual, 0));
+
+    return { resumenPorTarjeta, totalGeneral };
   }
 
   async obtenerResumenGeneralAnual(usuario: Usuario, anio?: number): Promise<CuotaResumenGeneralResponseDto> {
     const year = anio || new Date().getFullYear();
-    const meses = this.MESES;
 
-    // Sumar todas las cuotas de todas las tarjetas por mes
-    const rows = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
-      .innerJoin('gasto.tarjetaCredito', 'tarjeta')
-      .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id })
+    const rows = await this.getQueryBaseUsuario(usuario.id)
       .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio: year })
       .select(['MONTH(cuota.fechaVencimiento) AS mes', 'SUM(cuota.montoCuota) AS totalGasto'])
       .groupBy('mes')
       .orderBy('mes', 'ASC')
       .getRawMany();
 
-    const resumenMensual = meses.map((mes, idx) => {
+    const resumenMensual = MESES.map((mes, idx) => {
       const row = rows.find((r) => +r.mes === idx + 1);
       return {
         mes,
-        totalGasto: row ? parseFloat(row.totalGasto) : 0,
+        totalGasto: redondear(+row?.totalGasto || 0),
       };
     });
 
-    const totalAnual = +resumenMensual.reduce((acc, m) => acc + m.totalGasto, 0).toFixed(2);
+    const totalAnual = redondear(resumenMensual.reduce((a, b) => a + b.totalGasto, 0));
 
     return { resumenMensual, totalAnual };
   }
@@ -226,14 +201,9 @@ export class CuotaService {
     anio?: number
   ): Promise<CuotaResumenTarjetaDetalladoResponseDto> {
     const year = anio || new Date().getFullYear();
-    const meses = this.MESES;
 
-    // Traer todas las cuotas de la tarjeta para el año
-    const cuotas = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
+    const cuotas = await this.getQueryBaseUsuario(usuario.id)
       .innerJoin('gasto.tarjetaCredito', 'tarjeta')
-      .where('gasto.usuarioId = :usuarioId', { usuarioId: usuario.id })
       .andWhere('tarjeta.id = :tarjetaId', { tarjetaId })
       .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio: year })
       .select([
@@ -245,34 +215,30 @@ export class CuotaService {
       .addSelect('gasto.id', 'gastoId')
       .getRawMany();
 
-    // Obtener nombre de la tarjeta y banco
     const tarjeta = await this.cuotaRepo.manager.getRepository('TarjetaCredito').findOne({
       where: { id: tarjetaId },
       relations: ['banco'],
     });
 
-    // Mapear por mes
-    const resumenMensual = meses.map((mes, idx) => {
+    const resumenMensual = MESES.map((mes, idx) => {
       const mesNum = idx + 1;
-      // Gasto actual: suma de montoCuota donde numeroCuota == 1 y el vencimiento es este mes
       const gastoActual = cuotas
         .filter((c) => +c.mes === mesNum && +c.numeroCuota === 1)
-        .reduce((acc, c) => acc + parseFloat(c.montoCuota), 0);
+        .reduce((acc, c) => acc + +c.montoCuota, 0);
 
-      // Monto cuotas: suma de montoCuota donde numeroCuota > 1 y el vencimiento es este mes
       const montoCuotas = cuotas
         .filter((c) => +c.mes === mesNum && +c.numeroCuota > 1)
-        .reduce((acc, c) => acc + parseFloat(c.montoCuota), 0);
+        .reduce((acc, c) => acc + +c.montoCuota, 0);
 
       return {
         mes,
-        gastoActual: +gastoActual.toFixed(2),
-        montoCuotas: +montoCuotas.toFixed(2),
-        totalMes: +(gastoActual + montoCuotas).toFixed(2),
+        gastoActual: redondear(gastoActual),
+        montoCuotas: redondear(montoCuotas),
+        totalMes: redondear(gastoActual + montoCuotas),
       };
     });
 
-    const totalAnual = +resumenMensual.reduce((acc, m) => acc + m.totalMes, 0).toFixed(2);
+    const totalAnual = redondear(resumenMensual.reduce((a, b) => a + b.totalMes, 0));
 
     return {
       tarjetaId,
@@ -282,5 +248,16 @@ export class CuotaService {
       resumenMensual,
       totalAnual,
     };
+  }
+
+  // ============================================================================
+  // 🧱 MÉTODOS PRIVADOS
+  // ============================================================================
+
+  private getQueryBaseUsuario(usuarioId: number) {
+    return this.cuotaRepo
+      .createQueryBuilder('cuota')
+      .innerJoin('cuota.gasto', 'gasto')
+      .where('gasto.usuarioId = :usuarioId', { usuarioId });
   }
 }

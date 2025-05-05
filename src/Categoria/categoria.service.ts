@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
@@ -14,135 +14,115 @@ export class CategoriaService {
     private categoriaGastoRepository: Repository<CategoriaGasto>
   ) {}
 
-  async create(dto: CreateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    // Validar unicidad (no case sensitive)
-    const exists = await this.categoriaGastoRepository
-      .createQueryBuilder('categoriaGasto')
-      .where('LOWER(categoriaGasto.nombre) = LOWER(:nombre)', { nombre: dto.nombre.trim() })
-      .andWhere('(categoriaGasto.usuarioId = :usuarioId OR categoriaGasto.usuarioId IS NULL)', {
-        usuarioId: usuario.id,
-      })
-      .andWhere('categoriaGasto.deletedAt IS NULL')
-      .getOne();
+  async crearCategoria(dto: CreateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
+    await this.validarNombreUnico(dto.nombre, usuario.id);
 
-    if (exists) {
-      throw new Error('Ya existe una categoría con ese nombre');
-    }
-
-    const categoriaGasto = this.categoriaGastoRepository.create({
-      nombre: dto.nombre,
-      descripcion: dto.descripcion ?? null,
+    const categoria = this.categoriaGastoRepository.create({
+      nombre: dto.nombre.trim(),
+      descripcion: dto.descripcion?.trim() ?? null,
       usuario,
     });
 
-    const saved = await this.categoriaGastoRepository.save(categoriaGasto);
-
-    return {
-      id: saved.id,
-      nombre: saved.nombre,
-      usuarioId: saved.usuario ? saved.usuario.id : null,
-    };
+    const saved = await this.categoriaGastoRepository.save(categoria);
+    return this.toResponseDto(saved);
   }
 
-  async findAllForUser(usuario: Usuario): Promise<CategoriaResponseDto[]> {
-    // Solo categorías del usuario (sin globales)
-    const categories = await this.categoriaGastoRepository
-      .createQueryBuilder('categoriaGasto')
-      .leftJoinAndSelect('categoriaGasto.usuario', 'usuario')
-      .where('usuario.id = :usuarioId', { usuarioId: usuario.id })
-      .andWhere('categoriaGasto.deletedAt IS NULL')
-      .getMany();
-
-    return categories.map((cat) => ({
-      id: cat.id,
-      nombre: cat.nombre,
-      usuarioId: cat.usuario ? cat.usuario.id : null,
-    }));
-  }
-
-  async findAllForUserAndGlobal(usuario: Usuario): Promise<CategoriaResponseDto[]> {
-    // Categorías del usuario + globales
-    const categories = await this.categoriaGastoRepository
-      .createQueryBuilder('categoriaGasto')
-      .leftJoinAndSelect('categoriaGasto.usuario', 'usuario')
-      .where('usuario.id = :usuarioId OR categoriaGasto.usuario IS NULL', { usuarioId: usuario.id })
-      .andWhere('categoriaGasto.deletedAt IS NULL')
-      .getMany();
-
-    return categories.map((cat) => ({
-      id: cat.id,
-      nombre: cat.nombre,
-      usuarioId: cat.usuario ? cat.usuario.id : null,
-    }));
-  }
-
-  async update(id: number, dto: UpdateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    const categoriaGasto = await this.categoriaGastoRepository.findOne({
-      where: { id, usuario: { id: usuario.id } },
+  async obtenerCategoriasDelUsuario(usuario: Usuario): Promise<CategoriaResponseDto[]> {
+    const categorias = await this.categoriaGastoRepository.find({
+      where: {
+        usuario: { id: usuario.id },
+        deletedAt: null,
+      },
       relations: ['usuario'],
     });
 
-    if (!categoriaGasto) {
-      throw new NotFoundException('Categoría no encontrada');
-    }
-
-    // Validar unicidad si cambia el nombre
-    if (dto.nombre && dto.nombre.trim().toLowerCase() !== categoriaGasto.nombre.trim().toLowerCase()) {
-      const exists = await this.categoriaGastoRepository
-        .createQueryBuilder('categoriaGasto')
-        .where('LOWER(categoriaGasto.nombre) = LOWER(:nombre)', { nombre: dto.nombre.trim() })
-        .andWhere('(categoriaGasto.usuarioId = :usuarioId OR categoriaGasto.usuarioId IS NULL)', {
-          usuarioId: usuario.id,
-        })
-        .andWhere('categoriaGasto.deletedAt IS NULL')
-        .andWhere('categoriaGasto.id != :id', { id })
-        .getOne();
-
-      if (exists) {
-        throw new Error('Ya existe una categoría con ese nombre');
-      }
-    }
-
-    categoriaGasto.nombre = dto.nombre ?? categoriaGasto.nombre;
-    categoriaGasto.descripcion = dto.descripcion ?? categoriaGasto.descripcion;
-
-    const updated = await this.categoriaGastoRepository.save(categoriaGasto);
-
-    return {
-      id: updated.id,
-      nombre: updated.nombre,
-      usuarioId: updated.usuario ? updated.usuario.id : null,
-    };
+    return categorias.map(this.toResponseDto);
   }
 
-  async remove(id: number, usuario: Usuario): Promise<void> {
-    const categoriaGasto = await this.categoriaGastoRepository.findOne({
-      where: { id, usuario: { id: usuario.id } },
-      relations: ['usuario'],
-    });
+  async obtenerCategoriasGlobalesYDelUsuario(usuario: Usuario): Promise<CategoriaResponseDto[]> {
+    const categorias = await this.categoriaGastoRepository
+      .createQueryBuilder('categoria')
+      .leftJoinAndSelect('categoria.usuario', 'usuario')
+      .where('usuario.id = :usuarioId OR categoria.usuario IS NULL', { usuarioId: usuario.id })
+      .andWhere('categoria.deletedAt IS NULL')
+      .getMany();
 
-    if (!categoriaGasto) {
-      throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
+    return categorias.map(this.toResponseDto);
+  }
+
+  async actualizarCategoria(id: number, dto: UpdateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
+    const categoria = await this.obtenerCategoriaDelUsuario(id, usuario.id);
+
+    if (dto.nombre && dto.nombre.trim().toLowerCase() !== categoria.nombre.trim().toLowerCase()) {
+      await this.validarNombreUnico(dto.nombre, usuario.id, id);
     }
 
-    if (!categoriaGasto.usuario) {
+    categoria.nombre = dto.nombre?.trim() ?? categoria.nombre;
+    categoria.descripcion = dto.descripcion?.trim() ?? categoria.descripcion;
+
+    const updated = await this.categoriaGastoRepository.save(categoria);
+    return this.toResponseDto(updated);
+  }
+
+  async eliminarCategoria(id: number, usuario: Usuario): Promise<void> {
+    const categoria = await this.obtenerCategoriaDelUsuario(id, usuario.id);
+
+    if (!categoria.usuario) {
       throw new NotFoundException('No se pueden eliminar categorías globales');
     }
 
-    await this.categoriaGastoRepository.softRemove(categoriaGasto);
+    await this.categoriaGastoRepository.softRemove(categoria);
   }
 
-  async restore(id: number, usuario: Usuario): Promise<void> {
-    const categoriaGasto = await this.categoriaGastoRepository.findOne({
+  async restaurarCategoria(id: number, usuario: Usuario): Promise<void> {
+    const categoria = await this.categoriaGastoRepository.findOne({
       where: { id },
       withDeleted: true,
       relations: ['usuario'],
     });
 
-    if (!categoriaGasto || categoriaGasto.usuario?.id !== usuario.id) {
+    if (!categoria || categoria.usuario?.id !== usuario.id) {
       throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
     }
 
     await this.categoriaGastoRepository.restore(id);
   }
+
+  // ---------------- MÉTODOS PRIVADOS ----------------
+
+  private async validarNombreUnico(nombre: string, usuarioId: number, excluirId?: number) {
+    const query = this.categoriaGastoRepository
+      .createQueryBuilder('categoria')
+      .where('LOWER(categoria.nombre) = LOWER(:nombre)', { nombre: nombre.trim() })
+      .andWhere('(categoria.usuarioId = :usuarioId OR categoria.usuarioId IS NULL)', { usuarioId })
+      .andWhere('categoria.deletedAt IS NULL');
+
+    if (excluirId) {
+      query.andWhere('categoria.id != :id', { id: excluirId });
+    }
+
+    const existente = await query.getOne();
+    if (existente) {
+      throw new BadRequestException('Ya existe una categoría con ese nombre');
+    }
+  }
+
+  private async obtenerCategoriaDelUsuario(id: number, usuarioId: number): Promise<CategoriaGasto> {
+    const categoria = await this.categoriaGastoRepository.findOne({
+      where: { id, usuario: { id: usuarioId } },
+      relations: ['usuario'],
+    });
+
+    if (!categoria) {
+      throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
+    }
+
+    return categoria;
+  }
+
+  private toResponseDto = (categoria: CategoriaGasto): CategoriaResponseDto => ({
+    id: categoria.id,
+    nombre: categoria.nombre,
+    usuarioId: categoria.usuario ? categoria.usuario.id : null,
+  });
 }
