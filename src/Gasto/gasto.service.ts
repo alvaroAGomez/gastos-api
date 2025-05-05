@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
@@ -13,6 +13,8 @@ import { CuotaService } from 'src/Cuota/cuota.service';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 import { Cuota } from 'src/Cuota/cuota.entity';
+import { GastoMensualDto } from './dto/GastoMensualDto';
+import { GastoMensualView } from './gasto-mensual.view';
 
 @Injectable()
 export class GastoService {
@@ -23,6 +25,7 @@ export class GastoService {
     @InjectRepository(TarjetaDebito) private debitoRepo: Repository<TarjetaDebito>,
     @InjectRepository(Usuario) private usuarioRepo: Repository<Usuario>,
     @InjectRepository(Cuota) private cuotaRepo: Repository<Cuota>,
+    private dataSource: DataSource,
     private readonly cuotaService: CuotaService
   ) {}
 
@@ -558,4 +561,22 @@ export class GastoService {
     tarjetaCreditoId: gasto.tarjetaCredito?.id ?? null,
     tarjetaDebitoId: gasto.tarjetaDebito?.id ?? null,
   });
+
+  async obtenerGastosMensualesPorTarjeta(usuarioId: number, tarjetaId: number): Promise<GastoMensualDto[]> {
+    const repo = this.dataSource.getRepository(GastoMensualView);
+
+    const rows = await repo.find({
+      where: { usuarioId, tarjetaId },
+      order: { fechaGasto: 'ASC' },
+    });
+
+    return rows.map((r) => ({
+      gastoId: r.gastoId,
+      fecha: r.fechaGasto,
+      descripcion: r.descripcion,
+      categoria: r.categoria,
+      monto: Number(r.montoCuota),
+      cuota: `${r.numeroCuota}/${r.totalCuotas || 1}`,
+    }));
+  }
 }

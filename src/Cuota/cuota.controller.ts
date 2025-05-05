@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { CuotaService } from './cuota.service';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
@@ -73,5 +73,12 @@ export class CuotaController {
   @ApiParam({ name: 'gastoId', type: Number })
   async cuotasPorGasto(@Param('gastoId') gastoId: number) {
     return this.cuotaService.obtenerCuotasPorGasto(gastoId);
+  }
+
+  @Get('pendientes-futuras/:tarjetaId')
+  @ApiOperation({ summary: 'Detalle de cuotas pendientes desde el mes siguiente por tarjeta' })
+  @ApiParam({ name: 'tarjetaId', type: Number })
+  async cuotasPendientesFuturas(@CurrentUser() usuario: Usuario, @Param('tarjetaId', ParseIntPipe) tarjetaId: number) {
+    return this.cuotaService.obtenerCuotasPendientesFuturas(usuario, tarjetaId);
   }
 }

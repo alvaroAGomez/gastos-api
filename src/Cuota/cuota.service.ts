@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Cuota } from './cuota.entity';
 import { Gasto } from 'src/Gasto/gasto.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
@@ -10,12 +10,15 @@ import { CuotaResumenGeneralResponseDto } from './dto/cuota-resumen-general.dto'
 import { CuotaResumenTarjetaDetalladoResponseDto } from './dto/cuota-resumen-tarjeta-detallado.dto';
 import { MESES } from 'src/common/constants/meses.const';
 import { redondear } from 'src/common/utils/math.util';
+import { CuotasPendientesFuturasView } from './cuotas-pendientes-futuras.view';
+import { CuotasPendientesFuturasResponseDto, CuotaPendienteDetalleDto } from './dto/cuotas-pendientes-futuras.dto';
 
 @Injectable()
 export class CuotaService {
   constructor(
     @InjectRepository(Cuota)
-    private readonly cuotaRepo: Repository<Cuota>
+    private readonly cuotaRepo: Repository<Cuota>,
+    private readonly dataSource: DataSource
   ) {}
 
   // ============================================================================
@@ -247,6 +250,25 @@ export class CuotaService {
       anio: year,
       resumenMensual,
       totalAnual,
+    };
+  }
+
+  async obtenerCuotasPendientesFuturas(
+    usuario: Usuario,
+    tarjetaId: number
+  ): Promise<CuotasPendientesFuturasResponseDto> {
+    const repo = this.dataSource.getRepository(CuotasPendientesFuturasView);
+
+    const detalles: CuotaPendienteDetalleDto[] = await repo.find({
+      where: { usuarioId: usuario.id, tarjetaId },
+      order: { fechaGasto: 'ASC' },
+    });
+
+    const totalGeneral = detalles.reduce((sum, d) => sum + Number(d.totalFaltante), 0);
+
+    return {
+      detalles,
+      totalGeneral,
     };
   }
 

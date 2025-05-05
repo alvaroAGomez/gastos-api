@@ -11,9 +11,10 @@ import { Usuario } from 'src/Usuario/usuario.entity';
 import { Cuota } from 'src/Cuota/cuota.entity';
 import { CuotaModule } from 'src/Cuota/cuota.module';
 import { GastoChartService } from './gasto-chart.service';
+import { GastoMensualView } from './gasto-mensual.view';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Gasto, TarjetaCredito, TarjetaDebito, Usuario, CategoriaGasto, Cuota]),
+    TypeOrmModule.forFeature([Gasto, TarjetaCredito, TarjetaDebito, Usuario, CategoriaGasto, Cuota, GastoMensualView]),
     CuotaModule,
   ],
   controllers: [GastoController],
