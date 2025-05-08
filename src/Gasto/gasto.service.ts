@@ -15,6 +15,7 @@ import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 import { Cuota } from 'src/Cuota/cuota.entity';
 import { GastoMensualDto } from './dto/GastoMensualDto';
 import { GastoMensualView } from './gasto-mensual.view';
+import { GastoDashboardFiltroDto } from './dto/gasto-dashboard-filtro.dto';
 
 @Injectable()
 export class GastoService {
@@ -421,29 +422,55 @@ export class GastoService {
     return { chartData: { labels: [], datasets: [] }, chartOptions: { responsive: true } };
   }
 
-  async findAllDashboard(userId: number): Promise<GastoDashboardDto[]> {
-    const gastos = await this.gastoRepo.find({
-      where: { usuario: { id: userId } },
-      relations: ['categoria', 'tarjetaCredito', 'tarjetaDebito'],
-      order: { fecha: 'DESC' },
-    });
+  async findAllDashboard(userId: number, filtro?: GastoDashboardFiltroDto): Promise<GastoDashboardDto[]> {
+    const query = this.gastoRepo
+      .createQueryBuilder('gasto')
+      .leftJoinAndSelect('gasto.categoria', 'categoria')
+      .leftJoinAndSelect('gasto.tarjetaCredito', 'tarjetaCredito')
+      .leftJoinAndSelect('gasto.tarjetaDebito', 'tarjetaDebito')
+      .where('gasto.usuarioId = :userId', { userId })
+      .andWhere('gasto.tarjetaCredito IS NOT NULL') // Solo tarjeta de crédito
+      .orderBy('gasto.fecha', 'DESC');
 
-    return gastos
-      .filter((g) => g.tarjetaCredito) // Solo gastos con tarjeta de crédito
-      .map((g) => ({
-        id: g.id,
-        tarjeta: g.tarjetaCredito?.nombreTarjeta ?? '',
-        categoria: g.categoria?.nombre ?? '',
-        monto: g.monto,
-        fecha: g.fecha,
-        descripcion: g.descripcion,
-        // --- datos para edición ---
-        categoriaGastoId: g.categoria?.id ?? null,
-        tarjetaCreditoId: g.tarjetaCredito?.id ?? null,
-        tarjetaDebitoId: g.tarjetaDebito?.id ?? null,
-        cuotas: g.totalCuotas,
-        esEnCuotas: g.esEnCuotas,
-      }));
+    if (filtro.fechaDesde) {
+      query.andWhere('gasto.fecha >= :fechaDesde', {
+        fechaDesde: new Date(filtro.fechaDesde),
+      });
+    }
+
+    if (filtro.fechaHasta) {
+      query.andWhere('gasto.fecha <= :fechaHasta', {
+        fechaHasta: new Date(filtro.fechaHasta),
+      });
+    }
+
+    if (filtro.categoriaId) {
+      query.andWhere('gasto.categoriaId = :categoriaId', {
+        categoriaId: filtro.categoriaId,
+      });
+    }
+
+    if (filtro.tarjetaId) {
+      query.andWhere('gasto.tarjetaCreditoId = :tarjetaId', {
+        tarjetaId: filtro.tarjetaId,
+      });
+    }
+
+    const gastos = await query.getMany();
+
+    return gastos.map((g) => ({
+      id: g.id,
+      tarjeta: g.tarjetaCredito?.nombreTarjeta ?? '',
+      categoria: g.categoria?.nombre ?? '',
+      monto: g.monto,
+      fecha: g.fecha,
+      descripcion: g.descripcion,
+      categoriaGastoId: g.categoria?.id ?? null,
+      tarjetaCreditoId: g.tarjetaCredito?.id ?? null,
+      tarjetaDebitoId: g.tarjetaDebito?.id ?? null,
+      cuotas: g.totalCuotas,
+      esEnCuotas: g.esEnCuotas,
+    }));
   }
 
   async getDoughnutCategoryData(userId: number): Promise<{ chartData: any }> {

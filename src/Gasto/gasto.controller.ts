@@ -10,6 +10,7 @@ import { Usuario } from 'src/Usuario/usuario.entity';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 import { GastoMensualDto } from './dto/GastoMensualDto';
+import { GastoDashboardFiltroDto } from './dto/gasto-dashboard-filtro.dto';
 
 @ApiTags('Gastos')
 @ApiBearerAuth()
@@ -66,8 +67,11 @@ export class GastoController {
   }
 
   @Get('dashboard/tarjetas')
-  async findAllDashboard(@CurrentUser() user: Usuario): Promise<GastoDashboardDto[]> {
-    return this.gastoService.findAllDashboard(user.id);
+  async findAllDashboard(
+    @CurrentUser() user: Usuario,
+    @Query() filtro: GastoDashboardFiltroDto
+  ): Promise<GastoDashboardDto[]> {
+    return this.gastoService.findAllDashboard(user.id, filtro);
   }
 
   @Put(':id')

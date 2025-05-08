@@ -189,12 +189,13 @@ export class TarjetaCreditoService {
   }
 
   private async getTotalConsumosPendientes(tarjetaId: number, fechaDesde: Date): Promise<number> {
+    const fechaLimite = new Date(fechaDesde.getFullYear(), fechaDesde.getMonth() + 1, 1); // primer día del mes siguiente
     const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
       .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
       .andWhere('cuota.pagada = false')
-      .andWhere('cuota.fechaVencimiento >= :hoy', { hoy: fechaDesde })
+      .andWhere('cuota.fechaVencimiento >= :limite', { limite: fechaLimite })
       .select('SUM(cuota.montoCuota)', 'total')
       .getRawOne();
 
