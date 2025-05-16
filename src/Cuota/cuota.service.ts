@@ -32,20 +32,32 @@ export class CuotaService {
     const cuotas: Cuota[] = [];
 
     for (let i = 0; i < gasto.totalCuotas; i++) {
-      const fecha = new Date(gasto.fecha);
-      fecha.setMonth(fecha.getMonth() + i);
+      const fechaVencimiento = this.agregarMesSeguro(new Date(gasto.fecha), i);
 
       cuotas.push(
         this.cuotaRepo.create({
           gasto,
           numeroCuota: i + 1,
           montoCuota: montoPorCuota,
-          fechaVencimiento: fecha,
+          fechaVencimiento,
         })
       );
     }
 
     await this.cuotaRepo.save(cuotas);
+  }
+
+  private agregarMesSeguro(base: Date, cantidad: number): Date {
+    const nueva = new Date(base);
+    const diaOriginal = nueva.getDate();
+
+    nueva.setDate(1); // evitar salto automático
+    nueva.setMonth(nueva.getMonth() + cantidad);
+
+    const ultimoDiaMes = new Date(nueva.getFullYear(), nueva.getMonth() + 1, 0).getDate();
+    nueva.setDate(Math.min(diaOriginal, ultimoDiaMes));
+
+    return nueva;
   }
 
   async eliminarCuotasPorGasto(gastoId: number): Promise<void> {

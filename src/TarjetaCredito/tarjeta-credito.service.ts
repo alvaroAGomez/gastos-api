@@ -45,7 +45,7 @@ export class TarjetaCreditoService {
 
   async actualizarTarjetaCredito(id: number, dto: UpdateTarjetaCreditoDto, usuarioId: number): Promise<TarjetaCredito> {
     const tarjeta = await this.obtenerTarjetaPorId(id, usuarioId);
-
+    tarjeta.banco = { id: dto.bancoId } as Banco;
     await this.validarTarjetaDuplicada(dto, usuarioId, id);
 
     Object.assign(tarjeta, {
