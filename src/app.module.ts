@@ -11,6 +11,7 @@ import { AutomapperModule } from '@automapper/nestjs';
 import { CuotaModule } from './cuota/cuota.module';
 import { BancoModule } from './banco/banco.module';
 import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
+import { CustomNamingStrategy } from './common/naming.strategy';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
         synchronize: config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
         /*         logging: true,
         logger: 'advanced-console', */
+        namingStrategy: new CustomNamingStrategy(),
       }),
     }),
     AutomapperModule.forRoot({
