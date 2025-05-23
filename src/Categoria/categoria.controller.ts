@@ -2,10 +2,10 @@ import { Controller, Post, Body, UseGuards, Get, Patch, Param, Delete, ParseIntP
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 import { CategoriaService } from './categoria.service';
-import { CurrentUser } from '../auth/current-user.decorator';
 import { Usuario } from '../Usuario/usuario.entity';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CurrentUser } from '../Auth/current-user.decorator';
 
 @ApiTags('Categorías de Gastos')
 @UseGuards(AuthGuard('jwt'))

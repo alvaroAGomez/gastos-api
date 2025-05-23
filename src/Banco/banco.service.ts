@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Banco } from './banco.entity';
 import { CreateBancoDto } from './dto/create-banco.dto';
 import { UpdateBancoDto } from './dto/update-banco.dto';
-import { Usuario } from 'src/usuario/usuario.entity';
+import { Usuario } from '../usuario/usuario.entity';
 import { BancoResponseDto } from './dto/banco-response.dto';
 
 @Injectable()

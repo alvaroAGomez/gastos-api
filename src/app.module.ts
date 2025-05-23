@@ -5,11 +5,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './Usuario/usuario.module';
 import { TarjetaCreditoModule } from './TarjetaCredito/tarjeta-credito.module';
 import { GastoModule } from './Gasto/gasto.module';
-import { AuthModule } from './auth/auth.module';
+import { AuthModule } from './Auth/auth.module';
 import { classes } from '@automapper/classes';
 import { AutomapperModule } from '@automapper/nestjs';
-import { CuotaModule } from './cuota/cuota.module';
-import { BancoModule } from './banco/banco.module';
+import { CuotaModule } from './Cuota/cuota.module';
+import { BancoModule } from './Banco/banco.module';
 import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
 import { CustomNamingStrategy } from './common/naming.strategy';
 

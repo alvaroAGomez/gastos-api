@@ -5,8 +5,8 @@ import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoResponseDto } from './dto/tarjeta-credito-response.dto';
 import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
-import { CurrentUser } from 'src/auth/current-user.decorator';
-import { Usuario } from 'src/Usuario/usuario.entity';
+import { CurrentUser } from '../Auth/current-user.decorator';
+import { Usuario } from '../Usuario/usuario.entity';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 

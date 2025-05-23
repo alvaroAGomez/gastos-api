@@ -1,8 +1,8 @@
 import { UseGuards, Controller, Get } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser } from 'src/auth/current-user.decorator';
-import { Usuario } from 'src/Usuario/usuario.entity';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { Usuario } from '../Usuario/usuario.entity';
 import { BancoService } from './banco.service';
 
 @ApiTags('Banco')
