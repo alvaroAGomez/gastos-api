@@ -30,7 +30,7 @@ import { CustomNamingStrategy } from './common/naming.strategy';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
+        synchronize: true, //config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
         /*         logging: true,
         logger: 'advanced-console', */
         namingStrategy: new CustomNamingStrategy(),
