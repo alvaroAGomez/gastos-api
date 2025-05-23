@@ -2,7 +2,7 @@ import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/
 import { CuotaService } from './cuota.service';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { CurrentUser } from '../Auth/current-user.decorator';
 import { Usuario } from '../Usuario/usuario.entity';
 import { CuotaResumenAnualResponseDto } from './dto/cuota-resumen-mensual.dto';
 import { FiltroCuotasDto } from './dto/filtro-cuotas.dto';

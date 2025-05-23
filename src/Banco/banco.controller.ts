@@ -1,7 +1,7 @@
 import { UseGuards, Controller, Get } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { CurrentUser } from '../Auth/current-user.decorator';
 import { Usuario } from '../Usuario/usuario.entity';
 import { BancoService } from './banco.service';
 
