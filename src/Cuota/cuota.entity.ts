@@ -1,4 +1,4 @@
-import { Gasto } from 'src/Gasto/gasto.entity';
+import { Gasto } from '../Gasto/gasto.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 
 @Entity('cuota')

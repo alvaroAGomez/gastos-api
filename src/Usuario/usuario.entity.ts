@@ -1,9 +1,9 @@
-import { Gasto } from 'src/Gasto/gasto.entity';
-import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
-import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
-import { CategoriaGasto } from 'src/Categoria/categoria.entity';
+import { Gasto } from '../Gasto/gasto.entity';
+import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
+import { TarjetaDebito } from '../TarjetaDebito/tarjeta-debito.entity';
+import { CategoriaGasto } from '../Categoria/categoria.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
-import { Banco } from 'src/Banco/banco.entity';
+import { Banco } from '../Banco/banco.entity';
 
 @Entity('usuario')
 export class Usuario {

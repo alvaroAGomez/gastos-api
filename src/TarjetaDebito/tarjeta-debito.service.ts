@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TarjetaDebito } from './tarjeta-debito.entity';
 import { CreateTarjetaDebitoDto } from './dto/create-tarjeta-debito.dto';
-import { Usuario } from 'src/Usuario/usuario.entity';
-import { Banco } from 'src/Banco/banco.entity';
+import { Usuario } from '../Usuario/usuario.entity';
+import { Banco } from '../Banco/banco.entity';
 import { TarjetaDebitoResponseDto } from './dto/tarjeta-debito-response.dto';
 import { UpdateTarjetaDebitoDto } from './dto/update-tarjeta-debito.dto';
 

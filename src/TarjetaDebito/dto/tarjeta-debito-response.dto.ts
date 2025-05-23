@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BancoResponseDto } from 'src/Banco/dto/banco-response.dto';
+import { BancoResponseDto } from '../../Banco/dto/banco-response.dto';
 
 export class TarjetaDebitoResponseDto {
   @ApiProperty({ example: 1 })

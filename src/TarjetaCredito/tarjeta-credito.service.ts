@@ -3,13 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TarjetaCredito } from './tarjeta-credito.entity';
 import { CreateTarjetaCreditoDto } from './dto/create-tarjeta-credito.dto';
-import { Usuario } from 'src/Usuario/usuario.entity';
-import { Banco } from 'src/Banco/banco.entity';
+import { Usuario } from '../Usuario/usuario.entity';
+import { Banco } from '../Banco/banco.entity';
 import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
-import { Cuota } from 'src/Cuota/cuota.entity';
-import { Gasto } from 'src/Gasto/gasto.entity';
+import { Cuota } from '../Cuota/cuota.entity';
+import { Gasto } from '../Gasto/gasto.entity';
 
 @Injectable()
 export class TarjetaCreditoService {

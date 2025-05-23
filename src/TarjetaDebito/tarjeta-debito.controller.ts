@@ -3,8 +3,8 @@ import { TarjetaDebitoService } from './tarjeta-debito.service';
 import { CreateTarjetaDebitoDto } from './dto/create-tarjeta-debito.dto';
 import { UpdateTarjetaDebitoDto } from './dto/update-tarjeta-debito.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { CurrentUser } from 'src/auth/current-user.decorator';
-import { Usuario } from 'src/Usuario/usuario.entity';
+import { CurrentUser } from '../Auth/current-user.decorator';
+import { Usuario } from '../Usuario/usuario.entity';
 import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('Tarjeta Débito')
