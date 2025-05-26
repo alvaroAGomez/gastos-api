@@ -1,5 +1,5 @@
 import { Gasto } from '../Gasto/gasto.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, DeleteDateColumn } from 'typeorm';
 
 @Entity('cuota')
 export class Cuota {
@@ -24,4 +24,7 @@ export class Cuota {
 
   @Column({ default: false })
   pagada: boolean;
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }

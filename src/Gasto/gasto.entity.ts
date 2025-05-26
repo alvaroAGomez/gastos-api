@@ -3,7 +3,7 @@ import { Cuota } from 'src/Cuota/cuota.entity';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, DeleteDateColumn } from 'typeorm';
 
 @Entity('gasto')
 export class Gasto {
@@ -39,4 +39,7 @@ export class Gasto {
 
   @OneToMany(() => Cuota, (cuota) => cuota.gasto)
   cuotas: Cuota[];
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }

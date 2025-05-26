@@ -59,6 +59,15 @@ export class TarjetaCreditoService {
 
   async eliminarTarjetaCredito(id: number, usuarioId: number): Promise<void> {
     const tarjeta = await this.obtenerTarjetaPorId(id, usuarioId);
+    const gastos = await this.gastoRepo.find({ where: { tarjetaCredito: { id: tarjeta.id }, deletedAt: null } });
+    for (const gasto of gastos) {
+      await this.cuotaRepo
+        .createQueryBuilder()
+        .softDelete()
+        .where('gastoId = :gastoId', { gastoId: gasto.id })
+        .execute();
+      await this.gastoRepo.softRemove(gasto);
+    }
     await this.tarjetaRepo.softRemove(tarjeta);
   }
 
