@@ -604,6 +604,9 @@ export class GastoService {
       categoria: r.categoria,
       monto: Number(r.montoCuota),
       cuota: `${r.numeroCuota}/${r.totalCuotas || 1}`,
+      esEnCuotas: r.esEnCuotas,
+      categoriaGastoId: r.categoriaGastoId,
+      totalCuotas: r.totalCuotas || 1,
     }));
   }
 }

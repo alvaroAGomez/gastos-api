@@ -5,4 +5,7 @@ export class GastoMensualDto {
   categoria: string;
   monto: number;
   cuota: string;
+  esEnCuotas: boolean;
+  categoriaGastoId: number;
+  totalCuotas: number;
 }

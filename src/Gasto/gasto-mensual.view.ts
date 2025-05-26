@@ -28,4 +28,10 @@ export class GastoMensualView {
 
   @ViewColumn()
   tarjetaId: number;
+
+  @ViewColumn()
+  esEnCuotas: boolean;
+
+  @ViewColumn()
+  categoriaGastoId: number;
 }
