@@ -83,6 +83,10 @@ export class GastoService {
     gasto.monto = dto.monto;
     gasto.fecha = new Date(dto.fecha);
     gasto.descripcion = dto.descripcion ?? '';
+    // Nuevo campo: mesPrimerPago
+    if (dto.mesPrimerPago) {
+      gasto.mesPrimerPago = new Date(dto.mesPrimerPago);
+    }
 
     const savedGasto = await this.gastoRepo.save(gasto);
 
@@ -151,6 +155,10 @@ export class GastoService {
     gasto.monto = typeof dto.monto === 'string' ? Number(dto.monto) : (dto.monto ?? gasto.monto);
     gasto.fecha = dto.fecha ? new Date(dto.fecha) : gasto.fecha;
     gasto.descripcion = dto.descripcion ?? gasto.descripcion;
+    // Nuevo campo: mesPrimerPago
+    if (dto.mesPrimerPago) {
+      gasto.mesPrimerPago = new Date(dto.mesPrimerPago);
+    }
 
     // Reglas para cuotas
     if (gasto.tarjetaCredito) {
@@ -470,6 +478,7 @@ export class GastoService {
       tarjetaDebitoId: g.tarjetaDebito?.id ?? null,
       cuotas: g.totalCuotas,
       esEnCuotas: g.esEnCuotas,
+      mesPrimerPago: g.mesPrimerPago ?? null,
     }));
   }
 
@@ -587,6 +596,7 @@ export class GastoService {
     nameCard: gasto.tarjetaCredito?.nombreTarjeta ?? '',
     tarjetaCreditoId: gasto.tarjetaCredito?.id ?? null,
     tarjetaDebitoId: gasto.tarjetaDebito?.id ?? null,
+    mesPrimerPago: gasto.mesPrimerPago ?? null,
   });
 
   async obtenerGastosMensualesPorTarjeta(usuarioId: number, tarjetaId: number): Promise<GastoMensualDto[]> {
@@ -607,6 +617,7 @@ export class GastoService {
       esEnCuotas: r.esEnCuotas,
       categoriaGastoId: r.categoriaGastoId,
       totalCuotas: r.totalCuotas || 1,
+      mesPrimerPago: r.mesPrimerPago ?? null,
     }));
   }
 }

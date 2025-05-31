@@ -33,4 +33,7 @@ export class GastoResponseDto {
 
   @ApiPropertyOptional()
   nameCard?: string;
+
+  @ApiPropertyOptional({ example: '2025-05-01', description: 'Mes del primer pago (solo mes/año, formato yyyy-mm-01)' })
+  mesPrimerPago?: string;
 }

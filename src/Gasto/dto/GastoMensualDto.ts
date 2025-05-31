@@ -8,4 +8,5 @@ export class GastoMensualDto {
   esEnCuotas: boolean;
   categoriaGastoId: number;
   totalCuotas: number;
+  mesPrimerPago: Date | null;
 }

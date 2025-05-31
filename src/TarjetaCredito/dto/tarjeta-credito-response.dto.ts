@@ -18,7 +18,7 @@ export class TarjetaCreditoResponseDto {
   cierreCiclo: Date;
 
   @ApiProperty()
-  fechaVencimiento: Date;
+  fechaVencimiensto: Date;
 
   @ApiProperty({ type: () => BancoResponseDto })
   banco: BancoResponseDto;

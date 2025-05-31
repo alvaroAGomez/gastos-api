@@ -34,4 +34,7 @@ export class GastoMensualView {
 
   @ViewColumn()
   categoriaGastoId: number;
+
+  @ViewColumn()
+  mesPrimerPago: Date | null;
 }
