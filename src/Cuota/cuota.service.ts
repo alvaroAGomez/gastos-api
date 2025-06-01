@@ -31,8 +31,11 @@ export class CuotaService {
     const montoPorCuota = redondear(gasto.monto / gasto.totalCuotas);
     const cuotas: Cuota[] = [];
 
+    // Usamos mesPrimerGasto como fecha base para las cuotas si existe, sino usamos la fecha del gasto
+    const fechaBase = gasto.mesPrimerPago ? new Date(gasto.mesPrimerPago) : new Date(gasto.fecha);
+
     for (let i = 0; i < gasto.totalCuotas; i++) {
-      const fechaVencimiento = this.agregarMesSeguro(new Date(gasto.fecha), i);
+      const fechaVencimiento = this.agregarMesSeguro(fechaBase, i);
 
       cuotas.push(
         this.cuotaRepo.create({
