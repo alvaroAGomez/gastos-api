@@ -14,7 +14,7 @@ export class TarjetaCredito {
   @ManyToOne(() => Banco, (banco) => banco.tarjetasCredito)
   banco: Banco;
 
-  @Column({ length: 16, unique: true })
+  @Column({ length: 4 })
   numeroTarjeta: string;
 
   @Column({ length: 50 })

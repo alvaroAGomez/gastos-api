@@ -150,8 +150,9 @@ export class TarjetaCreditoService {
     excluirId?: number
   ): Promise<void> {
     const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
-    const nombreLower = (dto.nombreTarjeta || '').trim().toLowerCase();
+    const nombreLower = dto.nombreTarjeta?.toLowerCase().trim();
 
+    // Construir la consulta base
     const qb = this.tarjetaRepo
       .createQueryBuilder('tarjeta')
       .where('tarjeta.usuarioId = :usuarioId', { usuarioId })
@@ -160,13 +161,15 @@ export class TarjetaCreditoService {
       .andWhere('RIGHT(tarjeta.numeroTarjeta, 4) = :ultimos4', { ultimos4 })
       .andWhere('tarjeta.deletedAt IS NULL');
 
+    // Si estamos actualizando, excluir la tarjeta actual
     if (excluirId) {
       qb.andWhere('tarjeta.id != :id', { id: excluirId });
     }
 
-    const existe = await qb.getOne();
-    if (existe) {
-      throw new BadRequestException('Ya existe una tarjeta con el mismo banco, nombre y últimos 4 dígitos');
+    const tarjetaExistente = await qb.getOne();
+
+    if (tarjetaExistente) {
+      throw new BadRequestException('Ya existe una tarjeta activa con el mismo banco, nombre y últimos 4 dígitos');
     }
   }
 
