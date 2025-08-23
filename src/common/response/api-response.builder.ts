@@ -35,22 +35,6 @@ export class ApiResponseBuilder<T> {
     };
   }
 
-  notFound(message?: string): ApiResponse<T> {
-    return this.error(404, 'Recurso no encontrado', message);
-  }
-
-  badRequest(error: string | string[], message?: string): ApiResponse<T> {
-    return this.error(400, error, message);
-  }
-
-  unauthorized(message?: string): ApiResponse<T> {
-    return this.error(401, 'No autorizado', message);
-  }
-
-  forbidden(message?: string): ApiResponse<T> {
-    return this.error(403, 'Acceso denegado', message);
-  }
-
   static success<T>(data: T, message?: string): ApiResponse<T> {
     return new ApiResponseBuilder<T>().success(data, message);
   }

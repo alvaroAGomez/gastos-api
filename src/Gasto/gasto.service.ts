@@ -8,6 +8,7 @@ import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { Repository, DataSource } from 'typeorm';
 import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
+import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
 
 export type Moneda = 'ARS' | 'USD';
 export type TipoGasto = 'normal' | 'cuotas' | 'debito';
@@ -24,25 +25,41 @@ export class GastosService {
   ) {}
 
   // ---------- Entrada única ----------
-  async createGasto(dto: CreateGastoDto) {
-    if (dto.tipo === 'debito') return this.createGastoDebito(dto);
-    if (dto.tipo === 'cuotas') {
-      if (!dto.cuotas || dto.cuotas < 2) throw new BadRequestException('Para cuotas, "cuotas" >= 2');
-      return this.createGastoCuotas(dto);
+  async createGasto(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+    try {
+      if (dto.tipo === 'debito') return this.createGastoDebito(dto);
+      if (dto.tipo === 'cuotas') {
+        if (!dto.cuotas || dto.cuotas < 2) {
+          return ApiResponseBuilder.error(400, 'Para cuotas, "cuotas" >= 2');
+        }
+        return this.createGastoCuotas(dto);
+      }
+      return this.createGastoNormal(dto);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return ApiResponseBuilder.error(400, error.message);
+      }
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, error.message);
     }
-    return this.createGastoNormal(dto);
   }
 
   // ---------- Casos ----------
-  private async createGastoNormal(dto: CreateGastoDto) {
+  private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
       const fecha = new Date(dto.fechaCompra);
       let ec = this.estadoParaFecha(fecha, estados);
-      if (!ec) throw new BadRequestException('No hay estado de cuenta para esa fecha');
-      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      if (!ec) {
+        return ApiResponseBuilder.error(400, 'No hay estado de cuenta para esa fecha');
+      }
+      if (ec.estado === 'cerrado') {
+        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      }
 
       const gasto = m.getRepository(Gasto).create({
         usuario_id: dto.usuarioId,
@@ -69,19 +86,23 @@ export class GastosService {
       });
       await m.getRepository(Cuota).save(cuota);
 
-      return { gastoId: gasto_id, estadoId: ec.id };
+      return ApiResponseBuilder.success({ gastoId: gasto_id, estadoId: ec.id }, 'Gasto creado exitosamente');
     });
   }
 
-  private async createGastoCuotas(dto: CreateGastoDto) {
+  private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
       const fechaCompra = new Date(dto.fechaCompra);
       let ecCompra = this.estadoParaFecha(fechaCompra, estados);
-      if (!ecCompra) throw new BadRequestException('No hay estado para esa fecha');
-      if (ecCompra.estado === 'cerrado') ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
+      if (!ecCompra) {
+        return ApiResponseBuilder.error(400, 'No hay estado para esa fecha');
+      }
+      if (ecCompra.estado === 'cerrado') {
+        ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
+      }
 
       const gasto = m.getRepository(Gasto).create({
         usuario_id: dto.usuarioId,
@@ -104,8 +125,12 @@ export class GastosService {
       for (let i = 0; i < n; i++) {
         const f = fechas[i];
         let ec = this.estadoParaFecha(f, estados);
-        if (!ec) throw new BadRequestException(`No hay estado para cuota #${i + 1}`);
-        if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+        if (!ec) {
+          return ApiResponseBuilder.error(400, `No hay estado para cuota #${i + 1}`);
+        }
+        if (ec.estado === 'cerrado') {
+          ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+        }
 
         const c = m.getRepository(Cuota).create({
           gasto_id,
@@ -118,19 +143,23 @@ export class GastosService {
         await m.getRepository(Cuota).save(c);
       }
 
-      return { gastoId: gasto_id, cuotas: n };
+      return ApiResponseBuilder.success({ gastoId: gasto_id, cuotas: n }, 'Gasto en cuotas creado exitosamente');
     });
   }
 
-  private async createGastoDebito(dto: CreateGastoDto) {
+  private async createGastoDebito(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
       const fecha = new Date(dto.fechaCompra);
       let ec = this.estadoParaFecha(fecha, estados);
-      if (!ec) throw new BadRequestException('No hay estado de cuenta para esa fecha');
-      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      if (!ec) {
+        return ApiResponseBuilder.error(400, 'No hay estado de cuenta para esa fecha');
+      }
+      if (ec.estado === 'cerrado') {
+        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      }
 
       const gasto = m.getRepository(Gasto).create({
         usuario_id: dto.usuarioId,
@@ -145,15 +174,17 @@ export class GastosService {
         debito_config_id: null,
       });
       const { id } = await m.getRepository(Gasto).save(gasto);
-      return { gastoId: id, estadoId: ec.id };
+      return ApiResponseBuilder.success({ gastoId: id, estadoId: ec.id }, 'Gasto por débito creado exitosamente');
     });
   }
 
   /** Usado por el scheduler: crea el gasto del mes desde la configuración */
-  async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string) {
+  async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const dc = await m.getRepository(DebitoConfig).findOne({ where: { id: debitoConfigId, activo: true } });
-      if (!dc) throw new NotFoundException('Configuración de débito no encontrada o inactiva');
+      if (!dc) {
+        return ApiResponseBuilder.error(404, 'Configuración de débito no encontrada o inactiva');
+      }
 
       // Fecha = día de la suscripción en el mes actual (o en la fecha que pases)
       const base = fechaOpcional ? new Date(fechaOpcional) : new Date();
@@ -166,8 +197,12 @@ export class GastosService {
 
       const estados = await this.findEstadosOrdenados(m, dc.tarjeta_id);
       let ec = this.estadoParaFecha(fechaCompra, estados);
-      if (!ec) throw new BadRequestException('No hay estado para esa fecha');
-      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      if (!ec) {
+        return ApiResponseBuilder.error(400, 'No hay estado para esa fecha');
+      }
+      if (ec.estado === 'cerrado') {
+        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      }
 
       const gasto = m.getRepository(Gasto).create({
         usuario_id: dc.usuario_id,
@@ -179,15 +214,18 @@ export class GastosService {
         moneda: dc.moneda as any,
         fecha_compra: fechaCompra,
         es_debito_auto: true,
-        debito_config_id: dc.id, // 👈 idempotencia por índice único (con periodo_mes)
+        debito_config_id: dc.id,
       });
 
       try {
         const { id } = await m.getRepository(Gasto).save(gasto);
-        return { gastoId: id, estadoId: ec.id };
+        return ApiResponseBuilder.success(
+          { gastoId: id, estadoId: ec.id },
+          'Gasto por débito automático creado exitosamente'
+        );
       } catch (e: any) {
         if (e?.code === 'ER_DUP_ENTRY' || e?.errno === 1062) {
-          return { gastoId: 0, estadoId: ec.id, note: 'ya-existia' };
+          return ApiResponseBuilder.success({ gastoId: 0, estadoId: ec.id, note: 'ya-existia' }, 'El gasto ya existe');
         }
         throw e;
       }
