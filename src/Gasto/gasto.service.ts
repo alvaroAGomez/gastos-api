@@ -1,729 +1,271 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+// src/modules/gastos/gastos.service.ts
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Cuota } from 'src/Cuota/cuota.entity';
+import { DebitoConfig } from 'src/DebitoConfig/debito-config.entity';
+import { EstadoCuenta } from 'src/EstadoCuenta/estado-cuenta.entity';
+import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
+import { Repository, DataSource } from 'typeorm';
 import { Gasto } from './gasto.entity';
-import { CreateGastoDto } from './dto/create-gasto.dto';
-import { UpdateGastoDto } from './dto/update-gasto.dto';
-import { GastoResponseDto } from './dto/gasto-response.dto';
-import { CategoriaGasto } from '../Categoria/categoria.entity';
-import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
-import { TarjetaDebito } from '../TarjetaDebito/tarjeta-debito.entity';
-import { Usuario } from '../Usuario/usuario.entity';
-import { CuotaService } from '../Cuota/cuota.service';
-import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
-import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
-import { Cuota } from '../Cuota/cuota.entity';
-import { GastoMensualDto } from './dto/GastoMensualDto';
-import { GastoMensualView } from './gasto-mensual.view';
-import { GastoDashboardFiltroDto } from './dto/gasto-dashboard-filtro.dto';
-import { GastoRecurrente, Frecuencia } from '../GastoRecurrente/gasto-recurrente.entity';
+
+export type Moneda = 'ARS' | 'USD';
+export type TipoGasto = 'normal' | 'cuotas' | 'debito';
+
+export class CrearGastoDto {
+  usuarioId!: number;
+  tarjetaId!: number;
+  categoriaId?: number;
+  descripcion?: string;
+  monto!: number;
+  moneda!: Moneda;
+  fechaCompra!: string; // 'YYYY-MM-DD'
+  tipo!: TipoGasto;
+  cuotas?: number; // si tipo='cuotas'
+}
 
 @Injectable()
-export class GastoService {
+export class GastosService {
   constructor(
-    @InjectRepository(Gasto) private gastoRepo: Repository<Gasto>,
-    @InjectRepository(CategoriaGasto) private categoriaRepo: Repository<CategoriaGasto>,
-    @InjectRepository(TarjetaCredito) private creditoRepo: Repository<TarjetaCredito>,
-    @InjectRepository(TarjetaDebito) private debitoRepo: Repository<TarjetaDebito>,
-    @InjectRepository(Usuario) private usuarioRepo: Repository<Usuario>,
-    @InjectRepository(Cuota) private cuotaRepo: Repository<Cuota>,
-    private dataSource: DataSource,
-    private readonly cuotaService: CuotaService
+    private readonly ds: DataSource,
+    @InjectRepository(Gasto) private readonly gastoRepo: Repository<Gasto>,
+    @InjectRepository(Cuota) private readonly cuotaRepo: Repository<Cuota>,
+    @InjectRepository(DebitoConfig) private readonly debitoRepo: Repository<DebitoConfig>,
+    @InjectRepository(EstadoCuenta) private readonly estadoRepo: Repository<EstadoCuenta>,
+    @InjectRepository(TarjetaCredito) private readonly tarjetaRepo: Repository<TarjetaCredito>
   ) {}
 
-  private readonly MESES = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ];
-
-  private readonly COLORS = [
-    '#1976d2',
-    '#388e3c',
-    '#fbc02d',
-    '#d32f2f',
-    '#7b1fa2',
-    '#0288d1',
-    '#c2185b',
-    '#ffa000',
-    '#388e3c',
-  ];
-
-  async create(dto: CreateGastoDto, userId: number): Promise<GastoResponseDto> {
-    // Validación: no se puede asociar a ambas tarjetas
-    if (dto.tarjetaCreditoId && dto.tarjetaDebitoId) {
-      throw new BadRequestException('No se puede asociar un gasto a tarjeta de crédito y débito al mismo tiempo.');
+  // ---------- Entrada única ----------
+  async crear(dto: CrearGastoDto) {
+    if (dto.tipo === 'debito') return this.crearDebito(dto);
+    if (dto.tipo === 'cuotas') {
+      if (!dto.cuotas || dto.cuotas < 2) throw new BadRequestException('Para cuotas, "cuotas" >= 2');
+      return this.crearCuotas(dto);
     }
-
-    const gasto = new Gasto();
-
-    gasto.usuario = await this.usuarioRepo.findOneByOrFail({ id: userId });
-    gasto.categoria = await this.categoriaRepo.findOneByOrFail({ id: dto.categoriaGastoId });
-
-    if (dto.tarjetaCreditoId) {
-      gasto.tarjetaCredito = await this.creditoRepo.findOneByOrFail({ id: dto.tarjetaCreditoId });
-      gasto.esEnCuotas = true;
-      gasto.totalCuotas = dto.numeroCuotas && dto.numeroCuotas > 1 ? dto.numeroCuotas : 1;
-    }
-
-    if (dto.tarjetaDebitoId) {
-      gasto.tarjetaDebito = await this.debitoRepo.findOneByOrFail({ id: dto.tarjetaDebitoId });
-      gasto.esEnCuotas = false;
-      gasto.totalCuotas = 0;
-    }
-
-    gasto.monto = dto.monto;
-    gasto.fecha = new Date(dto.fecha);
-    gasto.descripcion = dto.descripcion ?? '';
-    // Nuevo campo: mesPrimerPago
-    if (dto.mesPrimerPago) {
-      gasto.mesPrimerPago = new Date(dto.mesPrimerPago);
-    }
-
-    const savedGasto = await this.gastoRepo.save(gasto);
-
-    if (gasto.tarjetaCredito && gasto.totalCuotas > 0) {
-      await this.cuotaService.generarCuotas(savedGasto);
-    }
-
-    return this.mapToResponseDto(savedGasto);
+    return this.crearNormal(dto);
   }
 
-  async findAll(userId: number): Promise<GastoResponseDto[]> {
-    const gastos = await this.gastoRepo.find({
-      where: { usuario: { id: userId } },
-      relations: ['categoria'],
-      order: { fecha: 'DESC' },
-    });
+  // ---------- Casos ----------
+  private async crearNormal(dto: CrearGastoDto) {
+    return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
-    return gastos.map(this.mapToResponseDto);
-  }
+      const fecha = new Date(dto.fechaCompra);
+      let ec = this.estadoParaFecha(fecha, estados);
+      if (!ec) throw new BadRequestException('No hay estado de cuenta para esa fecha');
+      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
 
-  async findOne(id: number, userId: number): Promise<GastoResponseDto> {
-    const gasto = await this.gastoRepo.findOne({
-      where: { id, usuario: { id: userId } },
-      relations: ['categoria'],
-    });
-
-    if (!gasto) throw new NotFoundException('Gasto no encontrado');
-
-    return this.mapToResponseDto(gasto);
-  }
-
-  async update(id: number, dto: UpdateGastoDto, userId: number): Promise<GastoResponseDto> {
-    const gasto = await this.gastoRepo.findOne({
-      where: { id, usuario: { id: userId } },
-      relations: ['categoria', 'tarjetaCredito', 'tarjetaDebito'],
-    });
-
-    if (!gasto) throw new NotFoundException('Gasto no encontrado');
-
-    // Validación: no se puede tener ambas tarjetas
-    if (dto.tarjetaCreditoId && dto.tarjetaDebitoId) {
-      throw new BadRequestException('No se puede asociar un gasto a tarjeta de crédito y débito al mismo tiempo.');
-    }
-
-    // Detectar si cambian fecha, cuotas o monto
-    const fechaAnterior = gasto.fecha;
-    const cuotasAnteriores = gasto.totalCuotas;
-    const montoAnterior = Number(gasto.monto);
-
-    if (dto.categoriaGastoId) {
-      gasto.categoria = await this.categoriaRepo.findOneByOrFail({ id: dto.categoriaGastoId });
-    }
-
-    if (dto.tarjetaCreditoId !== undefined) {
-      gasto.tarjetaCredito = dto.tarjetaCreditoId
-        ? await this.creditoRepo.findOneByOrFail({ id: dto.tarjetaCreditoId })
-        : null;
-    }
-
-    if (dto.tarjetaDebitoId !== undefined) {
-      gasto.tarjetaDebito = dto.tarjetaDebitoId
-        ? await this.debitoRepo.findOneByOrFail({ id: dto.tarjetaDebitoId })
-        : null;
-    }
-
-    gasto.monto = typeof dto.monto === 'string' ? Number(dto.monto) : (dto.monto ?? gasto.monto);
-    gasto.fecha = dto.fecha ? new Date(dto.fecha) : gasto.fecha;
-    gasto.descripcion = dto.descripcion ?? gasto.descripcion;
-    // Nuevo campo: mesPrimerPago
-    if (dto.mesPrimerPago) {
-      gasto.mesPrimerPago = new Date(dto.mesPrimerPago);
-    }
-
-    // Reglas para cuotas
-    if (gasto.tarjetaCredito) {
-      gasto.esEnCuotas = true;
-      gasto.totalCuotas = dto.numeroCuotas && dto.numeroCuotas > 1 ? dto.numeroCuotas : 1;
-    } else {
-      gasto.esEnCuotas = false;
-      gasto.totalCuotas = 0;
-    }
-
-    // Si cambió la fecha, la cantidad de cuotas o el monto, eliminar cuotas viejas y generar nuevas
-    const fechaCambio = dto.fecha && new Date(dto.fecha).getTime() !== new Date(fechaAnterior).getTime();
-    const cuotasCambio = dto.numeroCuotas !== undefined && dto.numeroCuotas !== cuotasAnteriores;
-    const montoCambio = dto.monto !== undefined && Number(dto.monto) !== montoAnterior;
-
-    if (fechaCambio || cuotasCambio || montoCambio) {
-      await this.cuotaService.eliminarCuotasPorGasto(gasto.id);
-    }
-
-    const updated = await this.gastoRepo.save(gasto);
-
-    if ((fechaCambio || cuotasCambio || montoCambio) && gasto.tarjetaCredito && gasto.totalCuotas > 0) {
-      await this.cuotaService.generarCuotas(updated);
-    }
-
-    return this.mapToResponseDto(updated);
-  }
-
-  async remove(id: number, userId: number): Promise<void> {
-    const gasto = await this.gastoRepo.findOne({
-      where: { id, usuario: { id: userId } },
-    });
-
-    if (!gasto) throw new NotFoundException();
-
-    await this.cuotaService.eliminarCuotasPorGasto(gasto.id);
-    await this.gastoRepo.delete(id);
-  }
-
-  async gastosPorTarjeta(tarjetaId: number, usuarioId: number, filtros: GastoTarjetaFiltroDto) {
-    const {
-      page = 1,
-      limit = 10,
-      fechaDesde,
-      fechaHasta,
-      categoria,
-      cuotasRestantes,
-      sortField = 'fecha',
-      sortDirection = 'DESC',
-    } = filtros;
-
-    const query = this.gastoRepo
-      .createQueryBuilder('gasto')
-      .leftJoinAndSelect('gasto.categoria', 'categoria')
-      .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
-      .andWhere('gasto.usuarioId = :usuarioId', { usuarioId });
-
-    if (fechaDesde != '' && fechaDesde != null) query.andWhere('gasto.fecha >= :fechaDesde', { fechaDesde });
-    if (fechaHasta != '' && fechaHasta != null) query.andWhere('gasto.fecha <= :fechaHasta', { fechaHasta });
-
-    // Cambia aquí: solo filtra por categoría si no es "Todas" ni vacío
-    if (categoria && categoria !== 'Todas') {
-      query.andWhere('gasto.categoria = :categoriaId', { categoriaId: categoria });
-    }
-
-    query.orderBy(`gasto.${sortField}`, sortDirection as any);
-
-    // Traer todos los gastos para calcular cuotas restantes en memoria
-    const allData = await query.getMany();
-
-    // Calcular cuotasRestantes para cada gasto
-    const now = new Date();
-    const gastosConCuotas = allData.map((gasto) => {
-      let cuotasRestantes = 0;
-      if (gasto.esEnCuotas && gasto.totalCuotas && gasto.fecha) {
-        const fechaGasto = new Date(gasto.fecha);
-        const mesesTranscurridos =
-          (now.getFullYear() - fechaGasto.getFullYear()) * 12 + (now.getMonth() - fechaGasto.getMonth());
-        cuotasRestantes = Math.max(gasto.totalCuotas - mesesTranscurridos, 0);
-      }
-      return {
-        ...this.mapToResponseDto(gasto),
-        cuotasRestantes,
-      };
-    });
-
-    // Filtrar por cuotasRestantes si corresponde
-    let filtered = gastosConCuotas;
-    if (cuotasRestantes !== undefined && cuotasRestantes !== null && !isNaN(Number(cuotasRestantes))) {
-      filtered = gastosConCuotas.filter((g) => g.cuotasRestantes === Number(cuotasRestantes));
-    }
-
-    // Paginación manual después del filtro
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    const paged = filtered.slice(start, end);
-
-    return { data: paged, total: filtered.length };
-  }
-
-  async getChartData(chartType: string, filtros: any, userId: number) {
-    if (chartType === 'line') {
-      // Ahora usamos cuotas para la evolución mensual
-      const year = filtros.anio || new Date().getFullYear();
-      const categorias = filtros.categoria;
-      const tarjetaId = filtros.tarjeta;
-
-      const query = this.cuotaRepo
-        .createQueryBuilder('cuota')
-        .leftJoin('cuota.gasto', 'gasto')
-        .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
-
-      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
-      } else if (categorias) {
-        query.andWhere('gasto.categoria = :categoria', { categoria: categorias });
-      }
-
-      if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: tarjetaId });
-
-      const rows = await query
-        .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
-        .groupBy('mes')
-        .orderBy('mes', 'ASC')
-        .getRawMany();
-
-      const meses = this.MESES;
-      const data = new Array(12).fill(0);
-      rows.forEach((r) => {
-        data[+r.mes - 1] = +r.total;
+      const gasto = m.getRepository(Gasto).create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ec.id,
+        descripcion: dto.descripcion ?? null,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: new Date(dto.fechaCompra),
+        es_debito_auto: false,
+        debito_config_id: null,
       });
+      const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
 
-      return {
-        chartData: {
-          labels: meses,
-          datasets: [{ data, label: 'Total Gastado', borderColor: '#1976d2', backgroundColor: '#90caf9' }],
-        },
-        chartOptions: { responsive: true },
-      };
-    }
-    if (chartType === 'doughnut') {
-      // Ahora usamos cuotas para la distribución por categoría
-      const year = filtros.anio || new Date().getFullYear();
-      const month = filtros.mes;
-      const categorias = filtros.categoria;
-      const tarjetaId = filtros.tarjeta;
-
-      const query = this.cuotaRepo
-        .createQueryBuilder('cuota')
-        .leftJoin('cuota.gasto', 'gasto')
-        .leftJoin('gasto.categoria', 'categoria')
-        .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
-
-      if (tarjetaId) {
-        query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
-      }
-
-      if (month) query.andWhere('MONTH(cuota.fechaVencimiento) = :month', { month });
-
-      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
-      }
-
-      const rows = await query
-        .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
-        .groupBy('categoria.nombre')
-        .orderBy('total', 'DESC')
-        .getRawMany();
-
-      const labels = rows.map((r) => r.categoria || 'Sin categoría');
-      const data = rows.map((r) => Number(r.total));
-
-      return {
-        chartData: {
-          labels,
-          datasets: [
-            {
-              data,
-              backgroundColor: this.COLORS.slice(0, labels.length),
-            },
-          ],
-        },
-        chartOptions: {
-          responsive: true,
-          plugins: {
-            legend: { display: true, position: 'right' },
-            tooltip: {
-              callbacks: {
-                label: (ctx: any) => {
-                  const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                  const value = ctx.dataset.data[ctx.dataIndex];
-                  const pct = total ? ((value / total) * 100).toFixed(1) : 0;
-                  return `${ctx.label}: $${value} (${pct}%)`;
-                },
-              },
-            },
-          },
-        },
-      };
-    }
-    if (chartType === 'bar') {
-      // Ahora usamos cuotas para la barra por categoría
-      const year = filtros.anio || new Date().getFullYear();
-      const month = filtros.mes;
-      const categorias = filtros.categoria;
-      const tarjetaId = filtros.tarjeta;
-
-      const query = this.cuotaRepo
-        .createQueryBuilder('cuota')
-        .leftJoin('cuota.gasto', 'gasto')
-        .leftJoin('gasto.categoria', 'categoria')
-        .where('gasto.usuarioId = :userId', { userId })
-        .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
-
-      if (tarjetaId) {
-        query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
-      }
-
-      if (month) query.andWhere('MONTH(cuota.fechaVencimiento) = :month', { month });
-
-      if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-        query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
-      }
-
-      const rows = await query
-        .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
-        .groupBy('categoria.nombre')
-        .orderBy('total', 'DESC')
-        .getRawMany();
-
-      const labels = rows.map((r) => r.categoria || 'Sin categoría');
-      const data = rows.map((r) => Number(r.total));
-
-      return {
-        chartData: {
-          labels,
-          datasets: [
-            {
-              data,
-              label: 'Gastos por Categoría',
-              backgroundColor: this.COLORS.slice(0, labels.length),
-              borderColor: this.COLORS.slice(0, labels.length),
-              borderWidth: 1,
-            },
-          ],
-        },
-        chartOptions: {
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx: any) => {
-                  return `$${ctx.parsed.y ?? ctx.parsed.x}`;
-                },
-              },
-            },
-          },
-          scales: {
-            x: { display: true, grid: { display: false, drawBorder: false } },
-            y: { display: true, grid: { display: false, drawBorder: false }, beginAtZero: true },
-          },
-        },
-      };
-    }
-    // ...otros tipos de gráfico...
-    return { chartData: { labels: [], datasets: [] }, chartOptions: { responsive: true } };
-  }
-
-  async findAllDashboard(userId: number, filtro?: GastoDashboardFiltroDto): Promise<GastoDashboardDto[]> {
-    const query = this.gastoRepo
-      .createQueryBuilder('gasto')
-      .leftJoinAndSelect('gasto.categoria', 'categoria')
-      .leftJoinAndSelect('gasto.tarjetaCredito', 'tarjetaCredito')
-      .leftJoinAndSelect('gasto.tarjetaDebito', 'tarjetaDebito')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('gasto.tarjetaCredito IS NOT NULL') // Solo tarjeta de crédito
-      .orderBy('gasto.fecha', 'DESC');
-
-    if (filtro.fechaDesde) {
-      query.andWhere('gasto.fecha >= :fechaDesde', {
-        fechaDesde: new Date(filtro.fechaDesde),
+      // (opcional) cuota #1 por homogeneidad visual
+      const cuota = m.getRepository(Cuota).create({
+        gasto_id,
+        estado_id: ec.id,
+        numero: 1,
+        fecha_cuota: new Date(dto.fechaCompra),
+        monto_cuota: dto.monto,
+        moneda: dto.moneda,
       });
-    }
+      await m.getRepository(Cuota).save(cuota);
 
-    if (filtro.fechaHasta) {
-      query.andWhere('gasto.fecha <= :fechaHasta', {
-        fechaHasta: new Date(filtro.fechaHasta),
-      });
-    }
-
-    if (filtro.categoriaId) {
-      query.andWhere('gasto.categoriaId = :categoriaId', {
-        categoriaId: filtro.categoriaId,
-      });
-    }
-
-    if (filtro.tarjetaId) {
-      query.andWhere('gasto.tarjetaCreditoId = :tarjetaId', {
-        tarjetaId: filtro.tarjetaId,
-      });
-    }
-
-    const gastos = await query.getMany();
-
-    return gastos.map((g) => ({
-      id: g.id,
-      tarjeta: g.tarjetaCredito?.nombreTarjeta ?? '',
-      categoria: g.categoria?.nombre ?? '',
-      monto: g.monto,
-      fecha: g.fecha,
-      descripcion: g.descripcion,
-      categoriaGastoId: g.categoria?.id ?? null,
-      tarjetaCreditoId: g.tarjetaCredito?.id ?? null,
-      tarjetaDebitoId: g.tarjetaDebito?.id ?? null,
-      cuotas: g.totalCuotas,
-      esEnCuotas: g.esEnCuotas,
-      mesPrimerPago: g.mesPrimerPago ?? null,
-    }));
-  }
-
-  async getDoughnutCategoryData(userId: number): Promise<{ chartData: any }> {
-    const now = new Date();
-    const mes = now.getMonth() + 1;
-    const anio = now.getFullYear();
-
-    const rows = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .leftJoin('cuota.gasto', 'gasto')
-      .leftJoin('gasto.categoria', 'categoria')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
-      .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
-      .groupBy('categoria.nombre')
-      .orderBy('total', 'DESC')
-      .getRawMany();
-
-    const labels = rows.map((r) => r.categoria || 'Sin categoría');
-    const data = rows.map((r) => Number(r.total));
-
-    return {
-      chartData: {
-        labels,
-        datasets: [
-          {
-            data,
-            backgroundColor: this.COLORS.slice(0, labels.length),
-          },
-        ],
-      },
-    };
-  }
-
-  async getBarMonthlyEvolutionData(userId: number): Promise<{ chartData: any }> {
-    const now = new Date();
-    const anio = now.getFullYear();
-
-    const rows = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .leftJoin('cuota.gasto', 'gasto')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
-      .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
-      .groupBy('mes')
-      .orderBy('mes', 'ASC')
-      .getRawMany();
-
-    const meses = this.MESES;
-    const data = new Array(12).fill(0);
-    rows.forEach((r) => {
-      data[+r.mes - 1] = +r.total;
+      return { gastoId: gasto_id, estadoId: ec.id };
     });
-
-    return {
-      chartData: {
-        labels: meses,
-        datasets: [
-          {
-            data,
-            label: 'Total Gastado',
-            backgroundColor: '#1976d2',
-            borderRadius: 8,
-          },
-        ],
-      },
-    };
   }
 
-  async getPieCardDistributionData(userId: number): Promise<{ chartData: any }> {
-    const now = new Date();
-    const mes = now.getMonth() + 1;
-    const anio = now.getFullYear();
+  private async crearCuotas(dto: CrearGastoDto) {
+    return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
-    const rows = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .leftJoin('cuota.gasto', 'gasto')
-      .leftJoin('gasto.tarjetaCredito', 'tarjeta')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
-      .select(['tarjeta.nombreTarjeta as tarjeta', 'SUM(cuota.montoCuota) as total'])
-      .groupBy('tarjeta.nombreTarjeta')
-      .orderBy('total', 'DESC')
-      .getRawMany();
+      const fechaCompra = new Date(dto.fechaCompra);
+      let ecCompra = this.estadoParaFecha(fechaCompra, estados);
+      if (!ecCompra) throw new BadRequestException('No hay estado para esa fecha');
+      if (ecCompra.estado === 'cerrado') ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
 
-    const labels = rows.map((r) => r.tarjeta || 'Sin tarjeta');
-    const data = rows.map((r) => Number(r.total));
-
-    return {
-      chartData: {
-        labels,
-        datasets: [
-          {
-            data,
-            backgroundColor: this.COLORS.slice(0, labels.length),
-          },
-        ],
-      },
-    };
-  }
-
-  private mapToResponseDto = (gasto: Gasto): any => ({
-    id: gasto.id,
-    monto: gasto.monto,
-    fecha: gasto.fecha,
-    descripcion: gasto.descripcion,
-    categoria: gasto.categoria?.nombre ?? '',
-    categoriaGastoId: gasto.categoria?.id ?? null,
-    cuotas: gasto.totalCuotas,
-    cuotasRestantes: undefined,
-    cardId: gasto.tarjetaCredito?.id?.toString() ?? '',
-    nameCard: gasto.tarjetaCredito?.nombreTarjeta ?? '',
-    tarjetaCreditoId: gasto.tarjetaCredito?.id ?? null,
-    tarjetaDebitoId: gasto.tarjetaDebito?.id ?? null,
-    mesPrimerPago: gasto.mesPrimerPago ?? null,
-  });
-
-  async obtenerGastosMensualesPorTarjeta(usuarioId: number, tarjetaId: number): Promise<GastoMensualDto[]> {
-    const repo = this.dataSource.getRepository(GastoMensualView);
-
-    const rows = await repo.find({
-      where: { usuarioId, tarjetaId },
-      order: { fechaGasto: 'ASC' },
-    });
-
-    return rows.map((r) => ({
-      gastoId: r.gastoId,
-      fecha: r.fechaGasto,
-      descripcion: r.descripcion,
-      categoria: r.categoria,
-      monto: Number(r.montoCuota),
-      cuota: `${r.numeroCuota}/${r.totalCuotas || 1}`,
-      esEnCuotas: r.esEnCuotas,
-      categoriaGastoId: r.categoriaGastoId,
-      totalCuotas: r.totalCuotas || 1,
-      mesPrimerPago: r.mesPrimerPago ?? null,
-    }));
-  }
-
-  private formatDate(date: string | Date): string {
-    if (!date) return null;
-    const d = new Date(date);
-    return d.toISOString().split('T')[0];
-  }
-
-  async crearGastoSuscripcion(
-    dto: CreateGastoDto,
-    usuario: Usuario,
-    gastoRecurrente: GastoRecurrente
-  ): Promise<GastoResponseDto> {
-    const gasto = this.gastoRepo.create({
-      descripcion: dto.descripcion,
-      monto: dto.monto,
-      fecha: new Date(dto.fecha),
-      usuario,
-      esSuscripcion: true,
-      gastoRecurrente,
-      esEnCuotas: false,
-      totalCuotas: 0,
-      mesPrimerPago: dto.mesPrimerPago ? new Date(this.formatDate(dto.mesPrimerPago)) : undefined,
-    });
-
-    if (dto.categoriaGastoId) {
-      const categoria = await this.categoriaRepo.findOne({ where: { id: dto.categoriaGastoId } });
-      if (!categoria) throw new NotFoundException('Categoría no encontrada');
-      gasto.categoria = categoria;
-    }
-
-    if (dto.tarjetaCreditoId && dto.tarjetaDebitoId) {
-      throw new BadRequestException('No se puede asociar a ambas tarjetas al mismo tiempo');
-    }
-
-    if (dto.tarjetaCreditoId) {
-      const tarjeta = await this.creditoRepo.findOne({
-        where: { id: dto.tarjetaCreditoId, usuario: { id: usuario.id } },
+      const gasto = m.getRepository(Gasto).create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ecCompra.id,
+        descripcion: dto.descripcion ?? null,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: new Date(dto.fechaCompra),
+        es_debito_auto: false,
+        debito_config_id: null,
       });
-      if (!tarjeta) throw new NotFoundException('Tarjeta de crédito no encontrada');
-      gasto.tarjetaCredito = tarjeta;
-    }
+      const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
 
-    if (dto.tarjetaDebitoId) {
-      const tarjeta = await this.debitoRepo.findOne({
-        where: { id: dto.tarjetaDebitoId, usuario: { id: usuario.id } },
-      });
-      if (!tarjeta) throw new NotFoundException('Tarjeta de débito no encontrada');
-      gasto.tarjetaDebito = tarjeta;
-    }
+      const n = dto.cuotas!;
+      const montoCuota = this.redondeo(dto.monto / n);
+      const fechas = this.generarFechasCuotas(fechaCompra, estados, n, ecCompra);
 
-    await this.crearGastosRecurrentes(gasto, gastoRecurrente, usuario);
+      for (let i = 0; i < n; i++) {
+        const f = fechas[i];
+        let ec = this.estadoParaFecha(f, estados);
+        if (!ec) throw new BadRequestException(`No hay estado para cuota #${i + 1}`);
+        if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
 
-    return GastoResponseDto.fromEntity(gasto);
-  }
-
-  private async crearGastosRecurrentes(
-    gastoBase: Gasto,
-    gastoRecurrente: GastoRecurrente,
-    usuario: Usuario
-  ): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // Guardar el gasto base con fecha formateada
-      gastoBase.fecha = new Date(this.formatDate(gastoBase.fecha));
-      await queryRunner.manager.save(gastoBase);
-
-      // Obtener la fecha de inicio del gasto recurrente
-      const fechaInicio = new Date(this.formatDate(gastoBase.fecha));
-
-      // Crear gastos futuros según la frecuencia
-      const cantidadMeses = gastoRecurrente.fechaFin
-        ? Math.ceil((gastoRecurrente.fechaFin.getTime() - fechaInicio.getTime()) / (30.44 * 24 * 60 * 60 * 1000))
-        : 12; // Si no hay fecha fin, crear para 12 meses
-
-      for (let i = 1; i <= cantidadMeses; i++) {
-        const fechaGasto = new Date(fechaInicio);
-        if (gastoRecurrente.frecuencia === Frecuencia.MENSUAL) {
-          fechaGasto.setMonth(fechaGasto.getMonth() + i);
-        } else if (gastoRecurrente.frecuencia === Frecuencia.ANUAL) {
-          fechaGasto.setFullYear(fechaGasto.getFullYear() + i);
-        }
-
-        const gastoFuturo = this.gastoRepo.create({
-          ...gastoBase,
-          id: undefined,
-          fecha: new Date(this.formatDate(fechaGasto)),
-          gastoRecurrente,
-          esSuscripcion: true,
-          usuario,
+        const c = m.getRepository(Cuota).create({
+          gasto_id,
+          estado_id: ec.id,
+          numero: i + 1,
+          fecha_cuota: f,
+          monto_cuota: montoCuota,
+          moneda: dto.moneda,
         });
-
-        await queryRunner.manager.save(gastoFuturo);
+        await m.getRepository(Cuota).save(c);
       }
 
-      await queryRunner.commitTransaction();
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
+      return { gastoId: gasto_id, cuotas: n };
+    });
+  }
+
+  private async crearDebito(dto: CrearGastoDto) {
+    return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
+
+      const fecha = new Date(dto.fechaCompra);
+      let ec = this.estadoParaFecha(fecha, estados);
+      if (!ec) throw new BadRequestException('No hay estado de cuenta para esa fecha');
+      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+
+      const gasto = m.getRepository(Gasto).create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ec.id,
+        descripcion: dto.descripcion ?? 'Débito automático',
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: new Date(dto.fechaCompra),
+        es_debito_auto: true,
+        debito_config_id: null,
+      });
+      const { id } = await m.getRepository(Gasto).save(gasto);
+      return { gastoId: id, estadoId: ec.id };
+    });
+  }
+
+  /** Usado por el scheduler: crea el gasto del mes desde la configuración */
+  async crearDesdeDebitoConfig(debitoConfigId: number, fechaOpcional?: string) {
+    return this.ds.transaction(async (m) => {
+      const dc = await m.getRepository(DebitoConfig).findOne({ where: { id: debitoConfigId, activo: true } });
+      if (!dc) throw new NotFoundException('Configuración de débito no encontrada o inactiva');
+
+      // Fecha = día de la suscripción en el mes actual (o en la fecha que pases)
+      const base = fechaOpcional ? new Date(fechaOpcional) : new Date();
+      const y = base.getUTCFullYear();
+      const mo = base.getUTCMonth();
+      const diaBase = new Date(dc.fecha_suscripcion).getUTCDate();
+      const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+      const dia = Math.min(diaBase, last);
+      const fechaCompra = new Date(Date.UTC(y, mo, dia));
+
+      const estados = await this.findEstadosOrdenados(m, dc.tarjeta_id);
+      let ec = this.estadoParaFecha(fechaCompra, estados);
+      if (!ec) throw new BadRequestException('No hay estado para esa fecha');
+      if (ec.estado === 'cerrado') ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+
+      const gasto = m.getRepository(Gasto).create({
+        usuario_id: dc.usuario_id,
+        tarjeta_id: dc.tarjeta_id,
+        categoria_id: dc.categoria_id ?? null,
+        estado_id: ec.id,
+        descripcion: dc.descripcion,
+        monto: Number(dc.monto),
+        moneda: dc.moneda as any,
+        fecha_compra: fechaCompra,
+        es_debito_auto: true,
+        debito_config_id: dc.id, // 👈 idempotencia por índice único (con periodo_mes)
+      });
+
+      try {
+        const { id } = await m.getRepository(Gasto).save(gasto);
+        return { gastoId: id, estadoId: ec.id };
+      } catch (e: any) {
+        if (e?.code === 'ER_DUP_ENTRY' || e?.errno === 1062) {
+          return { gastoId: 0, estadoId: ec.id, note: 'ya-existia' };
+        }
+        throw e;
+      }
+    });
+  }
+
+  // ---------- helpers ----------
+  private async findTarjetaDelUsuario(m: any, tarjetaId: number, usuarioId: number) {
+    const tarjeta = await m.getRepository(TarjetaCredito).findOne({
+      where: { id: tarjetaId },
+      relations: ['usuario'],
+    });
+    if (!tarjeta || (tarjeta.usuario as any)?.id !== usuarioId) {
+      throw new NotFoundException('Tarjeta no encontrada o no pertenece al usuario');
     }
+    return tarjeta;
+  }
+
+  private async findEstadosOrdenados(m: any, tarjetaId: number) {
+    return m.getRepository(EstadoCuenta).find({
+      where: { tarjeta_id: tarjetaId },
+      order: { fecha_cierre: 'ASC' },
+    });
+  }
+
+  /** Criterio de asignación por rango (inicio, fin] */
+  private estadoParaFecha(fecha: Date, estados: EstadoCuenta) {
+    for (const e of estados as any as EstadoCuenta[]) {
+      const ini = new Date(e.inicio_periodo); // excluyente
+      const fin = new Date(e.fin_periodo); // incluyente
+      if (fecha > ini && fecha <= fin) return e;
+    }
+    return undefined;
+  }
+  private siguienteAbierto(actual: EstadoCuenta, estados: EstadoCuenta[]) {
+    const idx = estados.findIndex((e) => e.id === actual.id);
+    for (let i = idx + 1; i < estados.length; i++) if (estados[i].estado !== 'cerrado') return estados[i];
+    return undefined;
+  }
+  private failNoAbierto(): never {
+    throw new BadRequestException('No hay estado abierto posterior disponible');
+  }
+
+  private clampDia(d: Date) {
+    const y = d.getUTCFullYear(),
+      m = d.getUTCMonth(),
+      day = d.getUTCDate();
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(day, last)));
+  }
+  private addMonths(base: Date, months: number) {
+    const y = base.getUTCFullYear(),
+      m = base.getUTCMonth() + months,
+      day = base.getUTCDate();
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(day, last)));
+  }
+  private generarFechasCuotas(fechaCompra: Date, estados: EstadoCuenta[], n: number, ecCompra: EstadoCuenta) {
+    const primera =
+      fechaCompra <= new Date(ecCompra.fecha_cierre)
+        ? this.clampDia(new Date(fechaCompra))
+        : this.addMonths(this.clampDia(new Date(fechaCompra)), 1);
+    const out = [primera];
+    for (let i = 1; i < n; i++) out.push(this.addMonths(primera, i));
+    return out;
+  }
+  private redondeo(n: number) {
+    return Math.round(n * 100) / 100;
   }
 }

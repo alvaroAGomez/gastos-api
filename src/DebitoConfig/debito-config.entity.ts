@@ -43,4 +43,7 @@ export class DebitoConfig {
 
   @ManyToOne(() => Categoria)
   categoria: Categoria;
+
+  @Column({ type: 'enum', enum: ['mensual', 'bimestral', 'trimestral', 'semestral', 'anual'], default: 'mensual' })
+  periodicidad: 'mensual' | 'bimestral' | 'trimestral' | 'semestral' | 'anual';
 }

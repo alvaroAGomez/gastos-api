@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, Index } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
 import { Categoria } from '../Categoria/categoria.entity';
@@ -6,6 +6,7 @@ import { Cuota } from '../Cuota/cuota.entity';
 import { EstadoCuenta } from '../EstadoCuenta/estado-cuenta.entity';
 
 @Entity('gasto')
+@Index('uq_gasto_debito_periodo', ['debito_config_id', 'periodo_mes'], { unique: true }) // 👈 idempotencia
 export class Gasto {
   @PrimaryGeneratedColumn()
   id: number;
@@ -51,4 +52,17 @@ export class Gasto {
 
   @OneToMany(() => Cuota, (cuota) => cuota.gasto)
   cuotas: Cuota[];
+
+  @Column({ type: 'bigint', unsigned: true, name: 'debito_config_id', nullable: true })
+  debito_config_id: number | null;
+
+  // Columna generada en MySQL (opcional pero recomendado). Si tu DB ya la tiene, dejalo.
+  @Column({
+    type: 'char',
+    length: 7,
+    name: 'periodo_mes',
+    asExpression: "DATE_FORMAT(`fecha_compra`, '%Y-%m')",
+    generatedType: 'STORED',
+  })
+  periodo_mes: string;
 }

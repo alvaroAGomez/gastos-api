@@ -10,9 +10,9 @@ import { classes } from '@automapper/classes';
 import { AutomapperModule } from '@automapper/nestjs';
 import { CuotaModule } from './Cuota/cuota.module';
 import { BancoModule } from './Banco/banco.module';
-import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
 import { CustomNamingStrategy } from './common/naming.strategy';
-import { GastoRecurrenteModule } from './GastoRecurrente/gasto-recurrente.module';
+import { EstadosModule } from './EstadoCuenta/estado-cuenta.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -47,8 +47,8 @@ import { GastoRecurrenteModule } from './GastoRecurrente/gasto-recurrente.module
     AuthModule,
     CuotaModule,
     BancoModule,
-    TarjetaDebitoModule,
-    GastoRecurrenteModule,
+    EstadosModule,
+    ScheduleModule.forRoot(),
   ],
   providers: [],
 })
