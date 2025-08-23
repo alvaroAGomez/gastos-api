@@ -35,17 +35,17 @@ export class GastosService {
   ) {}
 
   // ---------- Entrada única ----------
-  async crear(dto: CrearGastoDto) {
-    if (dto.tipo === 'debito') return this.crearDebito(dto);
+  async createGasto(dto: CrearGastoDto) {
+    if (dto.tipo === 'debito') return this.createGastoDebito(dto);
     if (dto.tipo === 'cuotas') {
       if (!dto.cuotas || dto.cuotas < 2) throw new BadRequestException('Para cuotas, "cuotas" >= 2');
-      return this.crearCuotas(dto);
+      return this.createGastoCuotas(dto);
     }
-    return this.crearNormal(dto);
+    return this.createGastoNormal(dto);
   }
 
   // ---------- Casos ----------
-  private async crearNormal(dto: CrearGastoDto) {
+  private async createGastoNormal(dto: CrearGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -84,7 +84,7 @@ export class GastosService {
     });
   }
 
-  private async crearCuotas(dto: CrearGastoDto) {
+  private async createGastoCuotas(dto: CrearGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -133,7 +133,7 @@ export class GastosService {
     });
   }
 
-  private async crearDebito(dto: CrearGastoDto) {
+  private async createGastoDebito(dto: CrearGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -161,7 +161,7 @@ export class GastosService {
   }
 
   /** Usado por el scheduler: crea el gasto del mes desde la configuración */
-  async crearDesdeDebitoConfig(debitoConfigId: number, fechaOpcional?: string) {
+  async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string) {
     return this.ds.transaction(async (m) => {
       const dc = await m.getRepository(DebitoConfig).findOne({ where: { id: debitoConfigId, activo: true } });
       if (!dc) throw new NotFoundException('Configuración de débito no encontrada o inactiva');

@@ -15,7 +15,7 @@ class CrearGastoDto implements _Crear {
   @ValidateIf((o) => o.tipo === 'cuotas') @IsInt() @Min(2) cuotas?: number;
 }
 
-class MaterializarDto {
+class CreateGastoFromDebitoConfigDto {
   @IsOptional() @IsDateString() fecha?: string;
 }
 
@@ -24,13 +24,15 @@ export class GastosController {
   constructor(private readonly gastos: GastosService) {}
 
   @Post()
-  crear(@Body() dto: CrearGastoDto) {
-    return this.gastos.crear(dto);
+  createGasto(@Body() dto: CrearGastoDto) {
+    return this.gastos.createGasto(dto);
   }
 
-  // opcional (lo usa el scheduler; sirve para backfill/testing)
   @Post('materializar-debito/:debitoConfigId')
-  materializar(@Param('debitoConfigId', ParseIntPipe) id: number, @Body() b: MaterializarDto) {
-    return this.gastos.crearDesdeDebitoConfig(id, b.fecha);
+  createGastoFromDebitoConfig(
+    @Param('debitoConfigId', ParseIntPipe) id: number,
+    @Body() dto: CreateGastoFromDebitoConfigDto
+  ) {
+    return this.gastos.createGastoFromDebitoConfig(id, dto.fecha);
   }
 }
