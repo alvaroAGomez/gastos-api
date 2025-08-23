@@ -7,21 +7,10 @@ import { EstadoCuenta } from 'src/EstadoCuenta/estado-cuenta.entity';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { Repository, DataSource } from 'typeorm';
 import { Gasto } from './gasto.entity';
+import { CreateGastoDto } from './dto/create-gasto.dto';
 
 export type Moneda = 'ARS' | 'USD';
 export type TipoGasto = 'normal' | 'cuotas' | 'debito';
-
-export class CrearGastoDto {
-  usuarioId!: number;
-  tarjetaId!: number;
-  categoriaId?: number;
-  descripcion?: string;
-  monto!: number;
-  moneda!: Moneda;
-  fechaCompra!: string; // 'YYYY-MM-DD'
-  tipo!: TipoGasto;
-  cuotas?: number; // si tipo='cuotas'
-}
 
 @Injectable()
 export class GastosService {
@@ -35,7 +24,7 @@ export class GastosService {
   ) {}
 
   // ---------- Entrada única ----------
-  async createGasto(dto: CrearGastoDto) {
+  async createGasto(dto: CreateGastoDto) {
     if (dto.tipo === 'debito') return this.createGastoDebito(dto);
     if (dto.tipo === 'cuotas') {
       if (!dto.cuotas || dto.cuotas < 2) throw new BadRequestException('Para cuotas, "cuotas" >= 2');
@@ -45,7 +34,7 @@ export class GastosService {
   }
 
   // ---------- Casos ----------
-  private async createGastoNormal(dto: CrearGastoDto) {
+  private async createGastoNormal(dto: CreateGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -84,7 +73,7 @@ export class GastosService {
     });
   }
 
-  private async createGastoCuotas(dto: CrearGastoDto) {
+  private async createGastoCuotas(dto: CreateGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -133,7 +122,7 @@ export class GastosService {
     });
   }
 
-  private async createGastoDebito(dto: CrearGastoDto) {
+  private async createGastoDebito(dto: CreateGastoDto) {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);

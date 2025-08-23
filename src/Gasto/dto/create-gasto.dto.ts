@@ -1,68 +1,50 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
-import { Frecuencia } from '../../GastoRecurrente/gasto-recurrente.entity';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+
+export type Moneda = 'ARS' | 'USD';
+export type TipoGasto = 'normal' | 'cuotas' | 'debito';
 
 export class CreateGastoDto {
-  @ApiPropertyOptional({ example: 1, description: 'ID de tarjeta de crédito (solo una tarjeta puede asociarse)' })
-  @IsOptional()
-  @IsNumber()
-  tarjetaCreditoId?: number;
-
-  @ApiPropertyOptional({ example: 2, description: 'ID de tarjeta de débito (solo una tarjeta puede asociarse)' })
-  @IsOptional()
-  @IsNumber()
-  tarjetaDebitoId?: number;
-
-  @ApiProperty({ example: 5, description: 'ID de categoría del gasto' })
+  @ApiProperty({ example: 1, description: 'ID del usuario que crea el gasto' })
   @IsNotEmpty()
   @IsNumber()
-  categoriaGastoId: number;
+  usuarioId!: number;
+
+  @ApiProperty({ example: 1, description: 'ID de la tarjeta' })
+  @IsNotEmpty()
+  @IsNumber()
+  tarjetaId!: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'ID de categoría del gasto' })
+  @IsOptional()
+  @IsNumber()
+  categoriaId?: number;
+
+  @ApiPropertyOptional({ example: 'Compra en supermercado', description: 'Descripción del gasto' })
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
 
   @ApiProperty({ example: 1500.75, description: 'Monto del gasto' })
   @IsNotEmpty()
   @IsNumber()
-  monto: number;
+  monto!: number;
 
-  @ApiProperty({ example: '2025-04-14', description: 'Fecha del gasto (formato ISO: yyyy-mm-dd)' })
+  @ApiProperty({ enum: ['ARS', 'USD'], description: 'Moneda del gasto' })
   @IsNotEmpty()
-  @IsDateString()
-  fecha: string;
+  moneda!: Moneda;
 
-  @ApiPropertyOptional({ example: 'Supermercado Día', description: 'Descripción opcional del gasto' })
-  @IsOptional()
-  descripcion?: string;
-
-  @ApiProperty({
-    example: true,
-    description: 'Indica si el gasto es en cuotas (solo válido si se usa tarjeta de crédito)',
-  })
+  @ApiProperty({ example: '2025-08-23', description: 'Fecha de la compra (formato: YYYY-MM-DD)' })
   @IsNotEmpty()
-  @IsBoolean()
-  esEnCuotas: boolean;
+  @IsString()
+  fechaCompra!: string;
 
-  @ApiPropertyOptional({
-    example: 3,
-    description: 'Número de cuotas (solo para tarjeta de crédito). Si no se indica, se asume 1 por defecto.',
-  })
+  @ApiProperty({ enum: ['normal', 'cuotas', 'debito'], description: 'Tipo de gasto' })
+  @IsNotEmpty()
+  tipo!: TipoGasto;
+
+  @ApiPropertyOptional({ example: 3, description: 'Número de cuotas (solo si tipo="cuotas")' })
   @IsOptional()
   @IsNumber()
-  numeroCuotas?: number;
-
-  @ApiPropertyOptional({ example: '2025-05-01', description: 'Mes del primer pago (solo mes/año, formato yyyy-mm-01)' })
-  @IsOptional()
-  @IsDateString()
-  mesPrimerPago?: string;
-
-  @ApiProperty({ description: 'Indica si el gasto es una suscripción recurrente' })
-  @IsBoolean()
-  esSuscripcion: boolean;
-
-  @ApiPropertyOptional({ description: 'Frecuencia de la suscripción', enum: Frecuencia })
-  @IsOptional()
-  frecuencia?: Frecuencia = Frecuencia.MENSUAL;
-
-  @ApiPropertyOptional({ description: 'Fecha de fin de la suscripción' })
-  @IsOptional()
-  @IsDateString()
-  fechaFinSuscripcion?: string = null;
+  cuotas?: number;
 }

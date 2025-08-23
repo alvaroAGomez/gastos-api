@@ -1,9 +1,10 @@
 // src/modules/gastos/gastos.controller.ts
 import { Body, Controller, Param, ParseIntPipe, Post } from '@nestjs/common';
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, Min, ValidateIf } from 'class-validator';
-import { GastosService, Moneda, TipoGasto, CrearGastoDto as _Crear } from './gasto.service';
+import { IsDateString, IsOptional } from 'class-validator';
+import { GastosService } from './gasto.service';
+import { CreateGastoDto } from './dto/create-gasto.dto';
 
-class CrearGastoDto implements _Crear {
+/* class CrearGastoDto implements _Crear {
   @IsInt() usuarioId!: number;
   @IsInt() tarjetaId!: number;
   @IsOptional() @IsInt() categoriaId?: number;
@@ -13,7 +14,7 @@ class CrearGastoDto implements _Crear {
   @IsDateString() fechaCompra!: string;
   @IsEnum(['normal', 'cuotas', 'debito'] as const) tipo!: TipoGasto;
   @ValidateIf((o) => o.tipo === 'cuotas') @IsInt() @Min(2) cuotas?: number;
-}
+} */
 
 class CreateGastoFromDebitoConfigDto {
   @IsOptional() @IsDateString() fecha?: string;
@@ -24,7 +25,7 @@ export class GastosController {
   constructor(private readonly gastos: GastosService) {}
 
   @Post()
-  createGasto(@Body() dto: CrearGastoDto) {
+  createGasto(@Body() dto: CreateGastoDto) {
     return this.gastos.createGasto(dto);
   }
 
