@@ -3,7 +3,6 @@ import { TarjetaCreditoService } from './tarjeta-credito.service';
 import { CreateTarjetaCreditoDto } from './dto/create-tarjeta-credito.dto';
 import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoResponseDto } from './dto/tarjeta-credito-response.dto';
-import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
 import { CurrentUser } from '../Auth/current-user.decorator';
 import { Usuario } from '../Usuario/usuario.entity';
@@ -20,54 +19,47 @@ export class TarjetaCreditoController {
   @Post()
   @ApiOperation({ summary: 'Crear una tarjeta de crédito' })
   @ApiResponse({ status: 201, type: TarjetaCreditoResponseDto })
-  crearTarjeta(@Body() dto: CreateTarjetaCreditoDto, @CurrentUser() user: Usuario) {
-    return this.service.crearTarjetaCredito(dto, user);
+  createTarjetaCredito(@Body() createTarjetaCreditoDto: CreateTarjetaCreditoDto, @CurrentUser() user: Usuario) {
+    return this.service.createTarjetaCredito(createTarjetaCreditoDto, user);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar tarjetas del usuario' })
+  @ApiOperation({ summary: 'Obtener todas las tarjetas del usuario' })
   @ApiResponse({ status: 200, type: [TarjetaCreditoResponseDto] })
-  obtenerTarjetas(@CurrentUser() user: Usuario) {
-    return this.service.obtenerTarjetasDelUsuario(user.id);
+  obtenerTarjetasCredito(@CurrentUser() user: Usuario) {
+    return this.service.obtenerTarjetasCredito(user.id);
   }
 
-  @Get(':id/detalle')
-  @ApiOperation({ summary: 'Detalle de cabecera de tarjeta de crédito' })
-  @ApiResponse({ status: 200, type: TarjetaCreditoDetalleDto })
-  obtenerDetalleTarjeta(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
-    return this.service.obtenerDetalleTarjeta(id, user.id);
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener una tarjeta de crédito por ID' })
+  @ApiResponse({ status: 200, type: TarjetaCreditoResponseDto })
+  getById(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.service.getById(id, user.id);
   }
 
   @Get('resumen')
-  @ApiOperation({ summary: 'Resumen de todas las tarjetas del usuario' })
+  @ApiOperation({ summary: 'Obtener resumen de todas las tarjetas del usuario' })
   @ApiResponse({ status: 200, type: [TarjetaCreditoResumenDto] })
-  obtenerResumen(@CurrentUser() user: Usuario) {
-    return this.service.obtenerResumenTarjetasPorUsuario(user.id);
-  }
-
-  @Get(':id/movimientos')
-  @ApiOperation({ summary: 'Movimientos recientes de la tarjeta de crédito' })
-  @ApiResponse({ status: 200, description: 'Lista de movimientos' })
-  obtenerMovimientos(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
-    return this.service.obtenerMovimientosTarjeta(id, user.id);
+  obtenerResumenTarjetas(@CurrentUser() user: Usuario) {
+    return this.service.obtenerResumenTarjetas(user.id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Actualizar tarjeta de crédito por ID' })
+  @ApiOperation({ summary: 'Actualizar una tarjeta de crédito' })
   @ApiResponse({ status: 200, type: TarjetaCreditoResponseDto })
   @ApiBody({ type: UpdateTarjetaCreditoDto })
-  actualizarTarjeta(
+  updateTarjetaCredito(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: Usuario,
-    @Body() dto: UpdateTarjetaCreditoDto
+    @Body() updateTarjetaCreditoDto: UpdateTarjetaCreditoDto,
+    @CurrentUser() user: Usuario
   ) {
-    return this.service.actualizarTarjetaCredito(id, dto, user.id);
+    return this.service.updateTarjetaCredito(id, updateTarjetaCreditoDto, user.id);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar (baja lógica) una tarjeta de crédito' })
-  @ApiResponse({ status: 200, description: 'Eliminado correctamente' })
-  eliminarTarjeta(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
-    return this.service.eliminarTarjetaCredito(id, user.id);
+  @ApiOperation({ summary: 'Eliminar una tarjeta de crédito' })
+  @ApiResponse({ status: 200 })
+  deleteTarjetaCredito(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.service.deleteTarjetaCredito(id, user.id);
   }
 }

@@ -12,6 +12,7 @@ import { CuotaModule } from './Cuota/cuota.module';
 import { BancoModule } from './Banco/banco.module';
 import { TarjetaDebitoModule } from './TarjetaDebito/tarjeta-debito.module';
 import { CustomNamingStrategy } from './common/naming.strategy';
+import { GastoRecurrenteModule } from './GastoRecurrente/gasto-recurrente.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { CustomNamingStrategy } from './common/naming.strategy';
     CuotaModule,
     BancoModule,
     TarjetaDebitoModule,
+    GastoRecurrenteModule,
   ],
   providers: [],
 })

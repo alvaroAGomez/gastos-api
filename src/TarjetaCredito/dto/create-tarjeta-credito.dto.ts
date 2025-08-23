@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsString, IsNumber, IsDateString, Length, IsOptional } from 'class-validator';
+import { IsInt, IsString, IsNumber, Length } from 'class-validator';
 
 export class CreateTarjetaCreditoDto {
   @ApiProperty({ example: 2 })
@@ -19,13 +19,11 @@ export class CreateTarjetaCreditoDto {
   @IsNumber()
   limiteCredito: number;
 
-  @ApiProperty({ example: '2025-05-10', required: false })
-  @IsOptional()
-  @IsDateString()
-  cierreCiclo?: string;
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  diaCierreDefault: number;
 
-  @ApiProperty({ example: '2025-05-20', required: false })
-  @IsOptional()
-  @IsDateString()
-  fechaVencimiento?: string;
+  @ApiProperty({ example: 20 })
+  @IsInt()
+  diaVencimientoDefault: number;
 }

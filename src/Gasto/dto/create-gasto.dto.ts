@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsDateString, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
+import { Frecuencia } from '../../GastoRecurrente/gasto-recurrente.entity';
 
 export class CreateGastoDto {
   @ApiPropertyOptional({ example: 1, description: 'ID de tarjeta de crédito (solo una tarjeta puede asociarse)' })
@@ -51,4 +52,17 @@ export class CreateGastoDto {
   @IsOptional()
   @IsDateString()
   mesPrimerPago?: string;
+
+  @ApiProperty({ description: 'Indica si el gasto es una suscripción recurrente' })
+  @IsBoolean()
+  esSuscripcion: boolean;
+
+  @ApiPropertyOptional({ description: 'Frecuencia de la suscripción', enum: Frecuencia })
+  @IsOptional()
+  frecuencia?: Frecuencia = Frecuencia.MENSUAL;
+
+  @ApiPropertyOptional({ description: 'Fecha de fin de la suscripción' })
+  @IsOptional()
+  @IsDateString()
+  fechaFinSuscripcion?: string = null;
 }

@@ -12,10 +12,12 @@ import { Cuota } from 'src/Cuota/cuota.entity';
 import { CuotaModule } from 'src/Cuota/cuota.module';
 import { GastoChartService } from './gasto-chart.service';
 import { GastoMensualView } from './gasto-mensual.view';
+import { GastoRecurrenteModule } from 'src/GastoRecurrente/gasto-recurrente.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Gasto, TarjetaCredito, TarjetaDebito, Usuario, CategoriaGasto, Cuota, GastoMensualView]),
     CuotaModule,
+    GastoRecurrenteModule,
   ],
   controllers: [GastoController],
   providers: [GastoService, GastoChartService],

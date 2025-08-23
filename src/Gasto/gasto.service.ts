@@ -5,17 +5,18 @@ import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { GastoResponseDto } from './dto/gasto-response.dto';
-import { CategoriaGasto } from 'src/Categoria/categoria.entity';
-import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
-import { TarjetaDebito } from 'src/TarjetaDebito/tarjeta-debito.entity';
-import { Usuario } from 'src/Usuario/usuario.entity';
-import { CuotaService } from 'src/Cuota/cuota.service';
+import { CategoriaGasto } from '../Categoria/categoria.entity';
+import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
+import { TarjetaDebito } from '../TarjetaDebito/tarjeta-debito.entity';
+import { Usuario } from '../Usuario/usuario.entity';
+import { CuotaService } from '../Cuota/cuota.service';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
-import { Cuota } from 'src/Cuota/cuota.entity';
+import { Cuota } from '../Cuota/cuota.entity';
 import { GastoMensualDto } from './dto/GastoMensualDto';
 import { GastoMensualView } from './gasto-mensual.view';
 import { GastoDashboardFiltroDto } from './dto/gasto-dashboard-filtro.dto';
+import { GastoRecurrente, Frecuencia } from '../GastoRecurrente/gasto-recurrente.entity';
 
 @Injectable()
 export class GastoService {
@@ -619,5 +620,110 @@ export class GastoService {
       totalCuotas: r.totalCuotas || 1,
       mesPrimerPago: r.mesPrimerPago ?? null,
     }));
+  }
+
+  private formatDate(date: string | Date): string {
+    if (!date) return null;
+    const d = new Date(date);
+    return d.toISOString().split('T')[0];
+  }
+
+  async crearGastoSuscripcion(
+    dto: CreateGastoDto,
+    usuario: Usuario,
+    gastoRecurrente: GastoRecurrente
+  ): Promise<GastoResponseDto> {
+    const gasto = this.gastoRepo.create({
+      descripcion: dto.descripcion,
+      monto: dto.monto,
+      fecha: new Date(dto.fecha),
+      usuario,
+      esSuscripcion: true,
+      gastoRecurrente,
+      esEnCuotas: false,
+      totalCuotas: 0,
+      mesPrimerPago: dto.mesPrimerPago ? new Date(this.formatDate(dto.mesPrimerPago)) : undefined,
+    });
+
+    if (dto.categoriaGastoId) {
+      const categoria = await this.categoriaRepo.findOne({ where: { id: dto.categoriaGastoId } });
+      if (!categoria) throw new NotFoundException('Categoría no encontrada');
+      gasto.categoria = categoria;
+    }
+
+    if (dto.tarjetaCreditoId && dto.tarjetaDebitoId) {
+      throw new BadRequestException('No se puede asociar a ambas tarjetas al mismo tiempo');
+    }
+
+    if (dto.tarjetaCreditoId) {
+      const tarjeta = await this.creditoRepo.findOne({
+        where: { id: dto.tarjetaCreditoId, usuario: { id: usuario.id } },
+      });
+      if (!tarjeta) throw new NotFoundException('Tarjeta de crédito no encontrada');
+      gasto.tarjetaCredito = tarjeta;
+    }
+
+    if (dto.tarjetaDebitoId) {
+      const tarjeta = await this.debitoRepo.findOne({
+        where: { id: dto.tarjetaDebitoId, usuario: { id: usuario.id } },
+      });
+      if (!tarjeta) throw new NotFoundException('Tarjeta de débito no encontrada');
+      gasto.tarjetaDebito = tarjeta;
+    }
+
+    await this.crearGastosRecurrentes(gasto, gastoRecurrente, usuario);
+
+    return GastoResponseDto.fromEntity(gasto);
+  }
+
+  private async crearGastosRecurrentes(
+    gastoBase: Gasto,
+    gastoRecurrente: GastoRecurrente,
+    usuario: Usuario
+  ): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Guardar el gasto base con fecha formateada
+      gastoBase.fecha = new Date(this.formatDate(gastoBase.fecha));
+      await queryRunner.manager.save(gastoBase);
+
+      // Obtener la fecha de inicio del gasto recurrente
+      const fechaInicio = new Date(this.formatDate(gastoBase.fecha));
+
+      // Crear gastos futuros según la frecuencia
+      const cantidadMeses = gastoRecurrente.fechaFin
+        ? Math.ceil((gastoRecurrente.fechaFin.getTime() - fechaInicio.getTime()) / (30.44 * 24 * 60 * 60 * 1000))
+        : 12; // Si no hay fecha fin, crear para 12 meses
+
+      for (let i = 1; i <= cantidadMeses; i++) {
+        const fechaGasto = new Date(fechaInicio);
+        if (gastoRecurrente.frecuencia === Frecuencia.MENSUAL) {
+          fechaGasto.setMonth(fechaGasto.getMonth() + i);
+        } else if (gastoRecurrente.frecuencia === Frecuencia.ANUAL) {
+          fechaGasto.setFullYear(fechaGasto.getFullYear() + i);
+        }
+
+        const gastoFuturo = this.gastoRepo.create({
+          ...gastoBase,
+          id: undefined,
+          fecha: new Date(this.formatDate(fechaGasto)),
+          gastoRecurrente,
+          esSuscripcion: true,
+          usuario,
+        });
+
+        await queryRunner.manager.save(gastoFuturo);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

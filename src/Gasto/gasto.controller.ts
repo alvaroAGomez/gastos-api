@@ -2,26 +2,49 @@ import { Controller, Post, Body, Get, Param, Delete, UseGuards, Put, Query, Pars
 import { GastoService } from './gasto.service';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { GastoResponseDto } from './dto/gasto-response.dto';
-import { JwtAuthGuard } from 'src/Auth/jwt-auth.guard';
-import { CurrentUser } from 'src/Auth/current-user.decorator';
+import { JwtAuthGuard } from '../Auth/jwt-auth.guard';
+import { CurrentUser } from '../Auth/current-user.decorator';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
-import { Usuario } from 'src/Usuario/usuario.entity';
+import { Usuario } from '../Usuario/usuario.entity';
 import { GastoTarjetaFiltroDto } from './dto/gasto-tarjeta-filtro.dto';
 import { GastoDashboardDto } from './dto/gasto-dashboard.dto';
 import { GastoMensualDto } from './dto/GastoMensualDto';
 import { GastoDashboardFiltroDto } from './dto/gasto-dashboard-filtro.dto';
+import { GastoRecurrenteService } from '../GastoRecurrente/gasto-recurrente.service';
 
 @ApiTags('Gastos')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('gastos')
 export class GastoController {
-  constructor(private readonly gastoService: GastoService) {}
+  constructor(
+    private readonly gastoService: GastoService,
+    private readonly gastoRecurrenteService: GastoRecurrenteService
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Crear un nuevo gasto' })
-  create(@Body() dto: CreateGastoDto, @CurrentUser() user: Usuario): Promise<GastoResponseDto> {
+  async create(@Body() dto: CreateGastoDto, @CurrentUser() user: Usuario): Promise<GastoResponseDto> {
+    if (dto.esSuscripcion) {
+      const gastoRecurrente = await this.gastoRecurrenteService.crearYRetornarEntidad(
+        {
+          descripcion: dto.descripcion,
+          monto: dto.monto,
+          fechaInicio: dto.fecha,
+          fechaFin: dto?.fechaFinSuscripcion,
+          frecuencia: dto?.frecuencia,
+          categoriaId: dto.categoriaGastoId,
+          tarjetaCreditoId: dto.tarjetaCreditoId,
+          tarjetaDebitoId: dto.tarjetaDebitoId,
+          mesPrimerPago: dto.mesPrimerPago,
+        },
+        user
+      );
+
+      return this.gastoService.crearGastoSuscripcion(dto, user, gastoRecurrente);
+    }
+
     return this.gastoService.create(dto, user.id);
   }
 

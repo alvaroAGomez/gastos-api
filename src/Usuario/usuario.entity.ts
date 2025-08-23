@@ -1,9 +1,7 @@
-import { Gasto } from '../Gasto/gasto.entity';
-import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
-import { TarjetaDebito } from '../TarjetaDebito/tarjeta-debito.entity';
-import { CategoriaGasto } from '../Categoria/categoria.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
 import { Banco } from '../Banco/banco.entity';
+import { Categoria } from '../Categoria/categoria.entity';
 
 @Entity('usuario')
 export class Usuario {
@@ -25,15 +23,9 @@ export class Usuario {
   @OneToMany(() => TarjetaCredito, (tarjeta) => tarjeta.usuario)
   tarjetasCredito: TarjetaCredito[];
 
-  @OneToMany(() => TarjetaDebito, (tarjeta) => tarjeta.usuario)
-  tarjetasDebito: TarjetaDebito[];
-
-  @OneToMany(() => Gasto, (gasto) => gasto.usuario)
-  gastos: Gasto[];
-
-  @OneToMany(() => CategoriaGasto, (categoria) => categoria.usuario)
-  categorias: CategoriaGasto[];
-
   @OneToMany(() => Banco, (banco) => banco.usuario)
   bancos: Banco[];
+
+  @OneToMany(() => Categoria, (categoria) => categoria.usuario)
+  categorias: Categoria[];
 }

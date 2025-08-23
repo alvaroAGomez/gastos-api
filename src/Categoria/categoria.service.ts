@@ -1,128 +1,218 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 import { CategoriaResponseDto } from './dto/categoria-response.dto';
-import { CategoriaGasto } from './categoria.entity';
 import { Usuario } from 'src/Usuario/usuario.entity';
+import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
+import { Categoria } from './categoria.entity';
 
 @Injectable()
 export class CategoriaService {
   constructor(
-    @InjectRepository(CategoriaGasto)
-    private categoriaGastoRepository: Repository<CategoriaGasto>
+    @InjectRepository(Categoria)
+    private categoriaRepository: Repository<Categoria>
   ) {}
 
-  async crearCategoria(dto: CreateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    await this.validarNombreUnico(dto.nombre, usuario.id);
+  async createCategoria(
+    createCategoriaDto: CreateCategoriaDto,
+    usuario: Usuario
+  ): Promise<ApiResponse<CategoriaResponseDto>> {
+    try {
+      // Validar que no exista otra categoría con el mismo nombre (insensible a mayúsculas/minúsculas)
+      const existente = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .where('LOWER(TRIM(categoria.nombre)) = LOWER(TRIM(:nombre))', {
+          nombre: createCategoriaDto.nombre,
+        })
+        .andWhere('(categoria.usuario_id = :usuarioId OR categoria.es_global = true)', {
+          usuarioId: usuario.id,
+        })
+        .getOne();
 
-    const categoria = this.categoriaGastoRepository.create({
-      nombre: dto.nombre.trim(),
-      descripcion: dto.descripcion?.trim() ?? null,
-      usuario,
-    });
+      if (existente) {
+        return ApiResponseBuilder.error(400, 'Ya existe una categoría con ese nombre');
+      }
 
-    const saved = await this.categoriaGastoRepository.save(categoria);
-    return this.toResponseDto(saved);
-  }
+      const categoria = this.categoriaRepository.create({
+        ...createCategoriaDto,
+        nombre: createCategoriaDto.nombre.trim(),
+        usuario: createCategoriaDto.es_global ? null : usuario,
+      });
 
-  async obtenerCategoriasDelUsuario(usuario: Usuario): Promise<CategoriaResponseDto[]> {
-    const categorias = await this.categoriaGastoRepository.find({
-      where: {
-        usuario: { id: usuario.id },
-        deletedAt: null,
-      },
-      relations: ['usuario'],
-    });
+      const saved = await this.categoriaRepository.save(categoria);
+      const response: CategoriaResponseDto = {
+        id: saved.id,
+        nombre: saved.nombre,
+        usuarioId: saved.usuario?.id || null,
+      };
 
-    return categorias.map(this.toResponseDto);
-  }
-
-  async obtenerCategoriasGlobalesYDelUsuario(usuario: Usuario): Promise<CategoriaResponseDto[]> {
-    const categorias = await this.categoriaGastoRepository
-      .createQueryBuilder('categoria')
-      .leftJoinAndSelect('categoria.usuario', 'usuario')
-      .where('usuario.id = :usuarioId OR categoria.usuario IS NULL', { usuarioId: usuario.id })
-      .andWhere('categoria.deletedAt IS NULL')
-      .getMany();
-
-    return categorias.map(this.toResponseDto);
-  }
-
-  async actualizarCategoria(id: number, dto: UpdateCategoriaDto, usuario: Usuario): Promise<CategoriaResponseDto> {
-    const categoria = await this.obtenerCategoriaDelUsuario(id, usuario.id);
-
-    if (dto.nombre && dto.nombre.trim().toLowerCase() !== categoria.nombre.trim().toLowerCase()) {
-      await this.validarNombreUnico(dto.nombre, usuario.id, id);
-    }
-
-    categoria.nombre = dto.nombre?.trim() ?? categoria.nombre;
-    categoria.descripcion = dto.descripcion?.trim() ?? categoria.descripcion;
-
-    const updated = await this.categoriaGastoRepository.save(categoria);
-    return this.toResponseDto(updated);
-  }
-
-  async eliminarCategoria(id: number, usuario: Usuario): Promise<void> {
-    const categoria = await this.obtenerCategoriaDelUsuario(id, usuario.id);
-
-    if (!categoria.usuario) {
-      throw new NotFoundException('No se pueden eliminar categorías globales');
-    }
-
-    await this.categoriaGastoRepository.softRemove(categoria);
-  }
-
-  async restaurarCategoria(id: number, usuario: Usuario): Promise<void> {
-    const categoria = await this.categoriaGastoRepository.findOne({
-      where: { id },
-      withDeleted: true,
-      relations: ['usuario'],
-    });
-
-    if (!categoria || categoria.usuario?.id !== usuario.id) {
-      throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
-    }
-
-    await this.categoriaGastoRepository.restore(id);
-  }
-
-  // ---------------- MÉTODOS PRIVADOS ----------------
-
-  private async validarNombreUnico(nombre: string, usuarioId: number, excluirId?: number) {
-    const query = this.categoriaGastoRepository
-      .createQueryBuilder('categoria')
-      .where('LOWER(categoria.nombre) = LOWER(:nombre)', { nombre: nombre.trim() })
-      .andWhere('(categoria.usuarioId = :usuarioId OR categoria.usuarioId IS NULL)', { usuarioId })
-      .andWhere('categoria.deletedAt IS NULL');
-
-    if (excluirId) {
-      query.andWhere('categoria.id != :id', { id: excluirId });
-    }
-
-    const existente = await query.getOne();
-    if (existente) {
-      throw new BadRequestException('Ya existe una categoría con ese nombre');
+      return ApiResponseBuilder.success(response, 'Categoría creada exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al crear la categoría');
     }
   }
 
-  private async obtenerCategoriaDelUsuario(id: number, usuarioId: number): Promise<CategoriaGasto> {
-    const categoria = await this.categoriaGastoRepository.findOne({
-      where: { id, usuario: { id: usuarioId } },
-      relations: ['usuario'],
-    });
+  async getCategorias(usuario: Usuario): Promise<ApiResponse<CategoriaResponseDto[]>> {
+    try {
+      const categorias = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .leftJoinAndSelect('categoria.usuario', 'usuario')
+        .where('usuario.id = :usuarioId OR categoria.es_global = true', {
+          usuarioId: usuario.id,
+        })
+        .getMany();
 
-    if (!categoria) {
-      throw new NotFoundException('Categoría no encontrada o no pertenece al usuario');
+      const response = categorias.map((cat) => ({
+        id: cat.id,
+        nombre: cat.nombre,
+        usuarioId: cat.usuario?.id || null,
+      }));
+
+      return ApiResponseBuilder.success(response, 'Categorías obtenidas exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al obtener las categorías');
     }
-
-    return categoria;
   }
 
-  private toResponseDto = (categoria: CategoriaGasto): CategoriaResponseDto => ({
-    id: categoria.id,
-    nombre: categoria.nombre,
-    usuarioId: categoria.usuario ? categoria.usuario.id : null,
-  });
+  async getCategoriasUsuario(usuario: Usuario): Promise<ApiResponse<CategoriaResponseDto[]>> {
+    try {
+      const categorias = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .leftJoinAndSelect('categoria.usuario', 'usuario')
+        .where('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .getMany();
+
+      const response = categorias.map((cat) => ({
+        id: cat.id,
+        nombre: cat.nombre,
+        usuarioId: cat.usuario.id,
+      }));
+
+      return ApiResponseBuilder.success(response, 'Categorías del usuario obtenidas exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al obtener las categorías del usuario');
+    }
+  }
+
+  async getCategoriasGlobales(): Promise<ApiResponse<CategoriaResponseDto[]>> {
+    try {
+      const categorias = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .where('categoria.es_global = true')
+        .getMany();
+
+      const response = categorias.map((cat) => ({
+        id: cat.id,
+        nombre: cat.nombre,
+        usuarioId: null,
+      }));
+
+      return ApiResponseBuilder.success(response, 'Categorías globales obtenidas exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al obtener las categorías globales');
+    }
+  }
+
+  async getById(id: number, usuario: Usuario): Promise<ApiResponse<CategoriaResponseDto>> {
+    try {
+      const categoria = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .leftJoinAndSelect('categoria.usuario', 'usuario')
+        .where('categoria.id = :id', { id })
+        .andWhere('(usuario.id = :usuarioId OR categoria.es_global = true)', {
+          usuarioId: usuario.id,
+        })
+        .getOne();
+
+      if (!categoria) {
+        return ApiResponseBuilder.error(404, 'Categoría no encontrada');
+      }
+
+      const response: CategoriaResponseDto = {
+        id: categoria.id,
+        nombre: categoria.nombre,
+        usuarioId: categoria.usuario?.id || null,
+      };
+
+      return ApiResponseBuilder.success(response, 'Categoría encontrada exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al obtener la categoría');
+    }
+  }
+
+  async updateCategoria(
+    id: number,
+    updateCategoriaDto: UpdateCategoriaDto,
+    usuario: Usuario
+  ): Promise<ApiResponse<CategoriaResponseDto>> {
+    try {
+      const categoria = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .leftJoinAndSelect('categoria.usuario', 'usuario')
+        .where('categoria.id = :id', { id })
+        .andWhere('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .getOne();
+
+      if (!categoria) {
+        return ApiResponseBuilder.error(404, 'Categoría no encontrada o no tienes permiso para modificarla');
+      }
+
+      if (updateCategoriaDto.nombre) {
+        // Validar que el nuevo nombre no exista (insensible a mayúsculas/minúsculas)
+        const existente = await this.categoriaRepository
+          .createQueryBuilder('categoria')
+          .where('LOWER(TRIM(categoria.nombre)) = LOWER(TRIM(:nombre))', {
+            nombre: updateCategoriaDto.nombre,
+          })
+          .andWhere('categoria.id != :id', { id })
+          .andWhere('(categoria.usuario_id = :usuarioId OR categoria.es_global = true)', {
+            usuarioId: usuario.id,
+          })
+          .getOne();
+
+        if (existente) {
+          return ApiResponseBuilder.error(400, 'Ya existe una categoría con ese nombre');
+        }
+
+        categoria.nombre = updateCategoriaDto.nombre.trim();
+      }
+
+      const saved = await this.categoriaRepository.save(categoria);
+      const response: CategoriaResponseDto = {
+        id: saved.id,
+        nombre: saved.nombre,
+        usuarioId: saved.usuario?.id || null,
+      };
+
+      return ApiResponseBuilder.success(response, 'Categoría actualizada exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al actualizar la categoría');
+    }
+  }
+
+  async deleteCategoria(id: number, usuario: Usuario): Promise<ApiResponse<void>> {
+    try {
+      const categoria = await this.categoriaRepository
+        .createQueryBuilder('categoria')
+        .leftJoinAndSelect('categoria.usuario', 'usuario')
+        .where('categoria.id = :id', { id })
+        .andWhere('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .getOne();
+
+      if (!categoria) {
+        return ApiResponseBuilder.error(404, 'Categoría no encontrada o no tienes permiso para eliminarla');
+      }
+
+      if (categoria.es_global) {
+        return ApiResponseBuilder.error(400, 'No se pueden eliminar categorías globales');
+      }
+
+      await this.categoriaRepository.softRemove(categoria);
+      return ApiResponseBuilder.success(null, 'Categoría eliminada exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(400, error.message, 'Error al eliminar la categoría');
+    }
+  }
 }

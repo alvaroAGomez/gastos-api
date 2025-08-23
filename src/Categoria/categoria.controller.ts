@@ -7,44 +7,56 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../Auth/current-user.decorator';
 
-@ApiTags('Categorías de Gastos')
+@ApiTags('Categorías')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
-@Controller('CategoriaGasto')
+@Controller('categoria')
 export class CategoriaController {
   constructor(private readonly categoriaService: CategoriaService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Crear una categoría de gasto' })
-  async crear(@Body() dto: CreateCategoriaDto, @CurrentUser() user: Usuario) {
-    return this.categoriaService.crearCategoria(dto, user);
+  @ApiOperation({ summary: 'Crear una nueva categoría' })
+  async createCategoria(@Body() createCategoriaDto: CreateCategoriaDto, @CurrentUser() user: Usuario) {
+    return this.categoriaService.createCategoria(createCategoriaDto, user);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Obtener categorías del usuario' })
-  async obtenerCategoriasDelUsuario(@CurrentUser() user: Usuario) {
-    return this.categoriaService.obtenerCategoriasDelUsuario(user);
+  @ApiOperation({ summary: 'Obtener todas las categorías (globales y del usuario)' })
+  async getCategorias(@CurrentUser() user: Usuario) {
+    return this.categoriaService.getCategorias(user);
   }
 
-  @Get('all')
-  @ApiOperation({ summary: 'Obtener categorías del usuario y globales' })
-  async obtenerCategoriasGlobalesYDelUsuario(@CurrentUser() user: Usuario) {
-    return this.categoriaService.obtenerCategoriasGlobalesYDelUsuario(user);
+  @Get('usuario')
+  @ApiOperation({ summary: 'Obtener solo las categorías del usuario' })
+  async getCategoriasUsuario(@CurrentUser() user: Usuario) {
+    return this.categoriaService.getCategoriasUsuario(user);
+  }
+
+  @Get('globales')
+  @ApiOperation({ summary: 'Obtener solo las categorías globales' })
+  async getCategoriasGlobales() {
+    return this.categoriaService.getCategoriasGlobales();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener una categoría específica por ID' })
+  async getById(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.categoriaService.getById(id, user);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Actualizar una categoría de gasto' })
-  async actualizar(
+  @ApiOperation({ summary: 'Actualizar una categoría' })
+  async updateCategoria(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateCategoriaDto,
+    @Body() updateCategoriaDto: UpdateCategoriaDto,
     @CurrentUser() user: Usuario
   ) {
-    return this.categoriaService.actualizarCategoria(id, dto, user);
+    return this.categoriaService.updateCategoria(id, updateCategoriaDto, user);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar (baja lógica) una categoría de gasto' })
-  async eliminar(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
-    return this.categoriaService.eliminarCategoria(id, user);
+  @ApiOperation({ summary: 'Eliminar una categoría' })
+  async deleteCategoria(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.categoriaService.deleteCategoria(id, user);
   }
 }

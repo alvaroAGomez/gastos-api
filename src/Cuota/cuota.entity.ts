@@ -1,30 +1,33 @@
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
 import { Gasto } from '../Gasto/gasto.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, DeleteDateColumn } from 'typeorm';
+import { EstadoCuenta } from '../EstadoCuenta/estado-cuenta.entity';
 
 @Entity('cuota')
 export class Cuota {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ name: 'gasto_id' })
+  gasto_id: number;
+
+  @Column({ name: 'estado_id' })
+  estado_id: number;
+
   @Column()
-  gastoId: number; // 👈 lo agregás explícitamente
-
-  @ManyToOne(() => Gasto, (gasto) => gasto.cuotas, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'gastoId' }) // 👈 asegurás que el campo gastoId se use como FK
-  gasto: Gasto;
-
-  @Column()
-  numeroCuota: number;
-
-  @Column('decimal', { precision: 10, scale: 2 })
-  montoCuota: number;
+  numero: number;
 
   @Column({ type: 'date' })
-  fechaVencimiento: Date;
+  fecha_cuota: Date;
 
-  @Column({ default: false })
-  pagada: boolean;
+  @Column('decimal', { precision: 10, scale: 2 })
+  monto_cuota: number;
 
-  @DeleteDateColumn()
-  deletedAt?: Date;
+  @Column({ length: 3 })
+  moneda: string;
+
+  @ManyToOne(() => Gasto, (gasto) => gasto.cuotas)
+  gasto: Gasto;
+
+  @ManyToOne(() => EstadoCuenta)
+  estado: EstadoCuenta;
 }

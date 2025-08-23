@@ -1,24 +1,30 @@
-import { Gasto } from 'src/Gasto/gasto.entity';
-import { Usuario } from 'src/Usuario/usuario.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, DeleteDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Usuario } from '../Usuario/usuario.entity';
+import { Gasto } from '../Gasto/gasto.entity';
 
-@Entity('categoria_gasto')
-export class CategoriaGasto {
+@Entity('categoria')
+export class Categoria {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 50 })
+  @Column({ length: 100 })
   nombre: string;
 
-  @Column({ length: 255, nullable: true })
-  descripcion: string;
+  @Column()
+  es_global: boolean;
 
-  @ManyToOne(() => Usuario, (usuario) => usuario.categorias, { nullable: true })
+  @Column({ name: 'usuario_id', nullable: true })
+  usuario_id: number;
+
+  @Column({ length: 7, nullable: true })
+  color_hex: string;
+
+  @Column({ length: 100, nullable: true })
+  icono: string;
+
+  @ManyToOne(() => Usuario, (usuario) => usuario.categorias)
   usuario: Usuario;
 
   @OneToMany(() => Gasto, (gasto) => gasto.categoria)
   gastos: Gasto[];
-
-  @DeleteDateColumn()
-  deletedAt?: Date;
 }

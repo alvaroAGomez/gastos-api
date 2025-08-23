@@ -1,5 +1,6 @@
 export class BancoResponseDto {
   id: number;
   nombre: string;
-  pais?: string;
+  logo_url?: string;
+  usuario_id: number;
 }

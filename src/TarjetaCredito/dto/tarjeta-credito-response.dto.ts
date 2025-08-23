@@ -15,10 +15,22 @@ export class TarjetaCreditoResponseDto {
   limiteCredito: number;
 
   @ApiProperty()
-  cierreCiclo: Date;
+  limiteDisponible: number;
 
   @ApiProperty()
-  fechaVencimiensto: Date;
+  gastoActual: number;
+
+  @ApiProperty()
+  diaCierre: number;
+
+  @ApiProperty()
+  diaVencimiento: number;
+
+  @ApiProperty()
+  cierreActual: Date;
+
+  @ApiProperty()
+  vencimientoActual: Date;
 
   @ApiProperty({ type: () => BancoResponseDto })
   banco: BancoResponseDto;

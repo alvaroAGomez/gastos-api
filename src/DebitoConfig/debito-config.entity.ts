@@ -1,12 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
 import { Categoria } from '../Categoria/categoria.entity';
-import { Cuota } from '../Cuota/cuota.entity';
-import { EstadoCuenta } from '../EstadoCuenta/estado-cuenta.entity';
 
-@Entity('gasto')
-export class Gasto {
+@Entity('debito_config')
+export class DebitoConfig {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -19,9 +17,6 @@ export class Gasto {
   @Column({ name: 'categoria_id' })
   categoria_id: number;
 
-  @Column({ name: 'estado_id' })
-  estado_id: number;
-
   @Column({ length: 200 })
   descripcion: string;
 
@@ -32,23 +27,20 @@ export class Gasto {
   moneda: string;
 
   @Column({ type: 'date' })
-  fecha_compra: Date;
+  fecha_suscripcion: Date;
 
   @Column({ type: 'boolean' })
-  es_debito_auto: boolean;
+  activo: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  observacion: string;
 
   @ManyToOne(() => Usuario)
   usuario: Usuario;
 
-  @ManyToOne(() => TarjetaCredito)
+  @ManyToOne(() => TarjetaCredito, (tarjeta) => tarjeta.debitoConfigs)
   tarjeta: TarjetaCredito;
 
   @ManyToOne(() => Categoria)
   categoria: Categoria;
-
-  @ManyToOne(() => EstadoCuenta)
-  estado: EstadoCuenta;
-
-  @OneToMany(() => Cuota, (cuota) => cuota.gasto)
-  cuotas: Cuota[];
 }

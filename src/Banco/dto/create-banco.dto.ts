@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, Length, IsUrl } from 'class-validator';
 
 export class CreateBancoDto {
   @ApiProperty()
-  @IsNotEmpty()
+  @IsString()
+  @Length(1, 100)
   nombre: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
-  pais: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUrl()
+  @Length(1, 200)
+  logo_url?: string;
 }

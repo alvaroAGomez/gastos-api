@@ -6,10 +6,10 @@ import { CreateTarjetaCreditoDto } from './dto/create-tarjeta-credito.dto';
 import { Usuario } from '../Usuario/usuario.entity';
 import { Banco } from '../Banco/banco.entity';
 import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
-import { TarjetaCreditoDetalleDto } from './dto/tarjeta-credito-detalle.dto';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
 import { Cuota } from '../Cuota/cuota.entity';
 import { Gasto } from '../Gasto/gasto.entity';
+import { ApiResponseBuilder } from 'src/common/response/api-response.builder';
 
 @Injectable()
 export class TarjetaCreditoService {
@@ -24,125 +24,151 @@ export class TarjetaCreditoService {
     private readonly gastoRepo: Repository<Gasto>
   ) {}
 
-  async crearTarjetaCredito(dto: CreateTarjetaCreditoDto, usuario: Usuario): Promise<TarjetaCredito> {
-    const banco = await this.bancoRepo.findOneBy({ id: dto.bancoId });
-    if (!usuario || !banco) {
-      throw new NotFoundException('Usuario o banco no encontrado');
-    }
+  async createTarjetaCredito(dto: CreateTarjetaCreditoDto, usuario: Usuario) {
+    try {
+      const banco = await this.bancoRepo.findOneBy({ id: dto.bancoId });
+      if (!usuario || !banco) {
+        throw new NotFoundException('Usuario o banco no encontrado');
+      }
 
-    await this.validarTarjetaDuplicada(dto, usuario.id);
+      await this.validarTarjetaDuplicada(dto, usuario.id);
 
-    const tarjeta = this.tarjetaRepo.create({
-      ...dto,
-      cierreCiclo: new Date(dto.cierreCiclo),
-      fechaVencimiento: new Date(dto.fechaVencimiento),
-      usuario,
-      banco,
-    });
-
-    return this.tarjetaRepo.save(tarjeta);
-  }
-
-  async actualizarTarjetaCredito(id: number, dto: UpdateTarjetaCreditoDto, usuarioId: number): Promise<TarjetaCredito> {
-    const tarjeta = await this.obtenerTarjetaPorId(id, usuarioId);
-    tarjeta.banco = { id: dto.bancoId } as Banco;
-    await this.validarTarjetaDuplicada(dto, usuarioId, id);
-
-    Object.assign(tarjeta, {
-      ...dto,
-      cierreCiclo: dto.cierreCiclo ? new Date(dto.cierreCiclo) : tarjeta.cierreCiclo,
-      fechaVencimiento: dto.fechaVencimiento ? new Date(dto.fechaVencimiento) : tarjeta.fechaVencimiento,
-    });
-
-    return this.tarjetaRepo.save(tarjeta);
-  }
-
-  async eliminarTarjetaCredito(id: number, usuarioId: number): Promise<void> {
-    const tarjeta = await this.obtenerTarjetaPorId(id, usuarioId);
-    const gastos = await this.gastoRepo.find({ where: { tarjetaCredito: { id: tarjeta.id }, deletedAt: null } });
-    for (const gasto of gastos) {
-      await this.cuotaRepo
-        .createQueryBuilder()
-        .softDelete()
-        .where('gastoId = :gastoId', { gastoId: gasto.id })
-        .execute();
-      await this.gastoRepo.softRemove(gasto);
-    }
-    await this.tarjetaRepo.softRemove(tarjeta);
-  }
-
-  async obtenerTarjetasDelUsuario(usuarioId: number): Promise<TarjetaCredito[]> {
-    return this.tarjetaRepo.find({
-      where: {
-        usuario: { id: usuarioId },
-        deletedAt: null,
-      },
-      relations: ['banco'],
-      order: { nombreTarjeta: 'ASC' },
-    });
-  }
-
-  async obtenerDetalleTarjeta(tarjetaId: number, usuarioId: number): Promise<TarjetaCreditoDetalleDto> {
-    const tarjeta = await this.obtenerTarjetaPorId(tarjetaId, usuarioId);
-
-    const now = new Date();
-    const gastoActualMensual = await this.getGastoActualMensual(tarjetaId, now);
-    const totalConsumosPendientes = await this.getTotalConsumosPendientes(tarjetaId, now);
-    const limiteDisponible = +(tarjeta.limiteCredito - totalConsumosPendientes - gastoActualMensual);
-
-    return {
-      tarjetaId: tarjeta.id,
-      nombreTarjeta: tarjeta.nombreTarjeta,
-      banco: tarjeta.banco?.nombre,
-      limiteTotal: tarjeta.limiteCredito,
-      gastoActualMensual,
-      totalConsumosPendientes,
-      limiteDisponible,
-    };
-  }
-
-  async obtenerResumenTarjetasPorUsuario(usuarioId: number): Promise<TarjetaCreditoResumenDto[]> {
-    const tarjetas = await this.obtenerTarjetasDelUsuario(usuarioId);
-    const now = new Date();
-
-    const resumenes: TarjetaCreditoResumenDto[] = [];
-
-    for (const tarjeta of tarjetas) {
-      const gastoActualMensual = await this.getGastoActualMensual(tarjeta.id, now);
-      const totalConsumosPendientes = await this.getTotalConsumosPendientes(tarjeta.id, now);
-      const limiteDisponible = tarjeta.limiteCredito - gastoActualMensual - totalConsumosPendientes;
-
-      resumenes.push({
-        tarjetaId: tarjeta.id,
-        nombreTarjeta: tarjeta.nombreTarjeta,
-        banco: tarjeta.banco?.nombre ?? '',
-        ultimos4: (tarjeta.numeroTarjeta || '').slice(-4),
-        gastoActualMensual,
-        totalConsumosPendientes,
-        limiteDisponible,
-        limiteTotal: tarjeta.limiteCredito,
+      const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
+      const tarjeta = this.tarjetaRepo.create({
+        nombre: dto.nombreTarjeta,
+        ultimos4Digitos: ultimos4,
+        limite_total: dto.limiteCredito,
+        dia_cierre_default: dto.diaCierreDefault,
+        dia_vencimiento_default: dto.diaVencimientoDefault,
+        banco,
+        usuario,
       });
-    }
 
-    return resumenes;
+      const savedTarjeta = await this.tarjetaRepo.save(tarjeta);
+      return ApiResponseBuilder.success(savedTarjeta, 'Tarjeta de crédito creada exitosamente');
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return ApiResponseBuilder.error(400, error.message);
+      }
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, 'Error al crear la tarjeta de crédito');
+    }
   }
 
-  async obtenerMovimientosTarjeta(tarjetaId: number, usuarioId: number) {
-    const now = new Date();
+  async getById(id: number, usuarioId: number) {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(id, usuarioId);
+      return ApiResponseBuilder.success(tarjeta, 'Tarjeta encontrada exitosamente');
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, 'Error al obtener la tarjeta');
+    }
+  }
 
-    const gastos = await this.gastoRepo.find({
-      where: { tarjetaCredito: { id: tarjetaId }, usuario: { id: usuarioId } },
-      relations: ['categoria', 'cuotas'],
-      order: { fecha: 'DESC' },
+  async obtenerTarjetasCredito(usuarioId: number) {
+    try {
+      const tarjetas = await this.tarjetaRepo.find({
+        where: { usuario: { id: usuarioId } },
+        relations: ['banco'],
+        order: { nombre: 'ASC' },
+      });
+      return ApiResponseBuilder.success(tarjetas, 'Tarjetas encontradas exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(500, 'Error al obtener las tarjetas');
+    }
+  }
+
+  async obtenerResumenTarjetas(usuarioId: number) {
+    try {
+      const tarjetas = await this.tarjetaRepo.find({
+        where: { usuario: { id: usuarioId } },
+        relations: ['banco'],
+        order: { nombre: 'ASC' },
+      });
+
+      const now = new Date();
+      const resumenes: TarjetaCreditoResumenDto[] = [];
+
+      for (const tarjeta of tarjetas) {
+        const gastoActualMensual = await this.calcularGastoActualMensual(tarjeta.id, now);
+        const totalConsumosPendientes = await this.calcularConsumosPendientes(tarjeta.id, now);
+        const limiteDisponible = tarjeta.limite_total - gastoActualMensual - totalConsumosPendientes;
+
+        resumenes.push({
+          tarjetaId: tarjeta.id,
+          nombreTarjeta: tarjeta.nombre,
+          banco: tarjeta.banco?.nombre ?? '',
+          ultimos4: tarjeta.ultimos4Digitos,
+          gastoActualMensual,
+          totalConsumosPendientes,
+          limiteDisponible,
+          limiteTotal: tarjeta.limite_total,
+        });
+      }
+
+      return ApiResponseBuilder.success(resumenes, 'Resumen de tarjetas obtenido exitosamente');
+    } catch (error) {
+      return ApiResponseBuilder.error(500, 'Error al obtener el resumen de tarjetas');
+    }
+  }
+
+  async updateTarjetaCredito(id: number, dto: UpdateTarjetaCreditoDto, usuarioId: number) {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(id, usuarioId);
+      await this.validarTarjetaDuplicada(dto, usuarioId, id);
+
+      const ultimos4 = dto.numeroTarjeta ? dto.numeroTarjeta.slice(-4) : tarjeta.ultimos4Digitos;
+      Object.assign(tarjeta, {
+        nombre: dto.nombreTarjeta || tarjeta.nombre,
+        ultimos4Digitos: ultimos4,
+        limite_total: dto.limiteCredito || tarjeta.limite_total,
+        dia_cierre_default: dto.diaCierreDefault || tarjeta.dia_cierre_default,
+        dia_vencimiento_default: dto.diaVencimientoDefault || tarjeta.dia_vencimiento_default,
+        banco: dto.bancoId ? ({ id: dto.bancoId } as Banco) : tarjeta.banco,
+      });
+
+      const updatedTarjeta = await this.tarjetaRepo.save(tarjeta);
+      return ApiResponseBuilder.success(updatedTarjeta, 'Tarjeta actualizada exitosamente');
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return ApiResponseBuilder.error(400, error.message);
+      }
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, 'Error al actualizar la tarjeta');
+    }
+  }
+
+  async deleteTarjetaCredito(id: number, usuarioId: number) {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(id, usuarioId);
+      await this.tarjetaRepo.softDelete(tarjeta.id);
+      return ApiResponseBuilder.success(null, 'Tarjeta eliminada exitosamente');
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, 'Error al eliminar la tarjeta');
+    }
+  }
+
+  private async buscarTarjetaPorId(id: number, usuarioId: number): Promise<TarjetaCredito> {
+    const tarjeta = await this.tarjetaRepo.findOne({
+      where: { id, usuario: { id: usuarioId } },
+      relations: ['banco'],
     });
 
-    return gastos
-      .filter((g) => g.esEnCuotas && g.totalCuotas > 0)
-      .map((g) => this.calcularMovimiento(g, now))
-      .filter((mov) => mov.cuotasPendientes > 0);
-  }
+    if (!tarjeta) {
+      throw new NotFoundException('Tarjeta no encontrada');
+    }
 
-  // ----------------------- MÉTODOS PRIVADOS -----------------------
+    return tarjeta;
+  }
 
   private async validarTarjetaDuplicada(
     dto: CreateTarjetaCreditoDto | UpdateTarjetaCreditoDto,
@@ -152,16 +178,13 @@ export class TarjetaCreditoService {
     const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
     const nombreLower = dto.nombreTarjeta?.toLowerCase().trim();
 
-    // Construir la consulta base
     const qb = this.tarjetaRepo
       .createQueryBuilder('tarjeta')
-      .where('tarjeta.usuarioId = :usuarioId', { usuarioId })
-      .andWhere('tarjeta.bancoId = :bancoId', { bancoId: dto.bancoId })
-      .andWhere('LOWER(TRIM(tarjeta.nombreTarjeta)) = :nombre', { nombre: nombreLower })
-      .andWhere('RIGHT(tarjeta.numeroTarjeta, 4) = :ultimos4', { ultimos4 })
-      .andWhere('tarjeta.deletedAt IS NULL');
+      .where('tarjeta.usuario = :usuarioId', { usuarioId })
+      .andWhere('tarjeta.banco = :bancoId', { bancoId: dto.bancoId })
+      .andWhere('LOWER(TRIM(tarjeta.nombre)) = :nombre', { nombre: nombreLower })
+      .andWhere('tarjeta.ultimos4Digitos = :ultimos4', { ultimos4 });
 
-    // Si estamos actualizando, excluir la tarjeta actual
     if (excluirId) {
       qb.andWhere('tarjeta.id != :id', { id: excluirId });
     }
@@ -173,63 +196,33 @@ export class TarjetaCreditoService {
     }
   }
 
-  private async obtenerTarjetaPorId(id: number, usuarioId: number): Promise<TarjetaCredito> {
-    const tarjeta = await this.tarjetaRepo.findOne({
-      where: { id, usuario: { id: usuarioId }, deletedAt: null },
-      relations: ['banco'],
-    });
-
-    if (!tarjeta) throw new NotFoundException('Tarjeta no encontrada');
-
-    return tarjeta;
-  }
-
-  private async getGastoActualMensual(tarjetaId: number, fecha: Date): Promise<number> {
+  private async calcularGastoActualMensual(tarjetaId: number, fecha: Date): Promise<number> {
     const mes = fecha.getMonth() + 1;
     const anio = fecha.getFullYear();
 
     const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
-      .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
-      .andWhere('MONTH(cuota.fechaVencimiento) = :mes', { mes })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :anio', { anio })
-      .select('SUM(cuota.montoCuota)', 'total')
+      .where('gasto.tarjeta_credito_id = :tarjetaId', { tarjetaId })
+      .andWhere('MONTH(cuota.fecha_vencimiento) = :mes', { mes })
+      .andWhere('YEAR(cuota.fecha_vencimiento) = :anio', { anio })
+      .select('SUM(cuota.monto_cuota)', 'total')
       .getRawOne();
 
     return +(result?.total || 0);
   }
 
-  private async getTotalConsumosPendientes(tarjetaId: number, fechaDesde: Date): Promise<number> {
-    const fechaLimite = new Date(fechaDesde.getFullYear(), fechaDesde.getMonth() + 1, 1); // primer día del mes siguiente
+  private async calcularConsumosPendientes(tarjetaId: number, fechaDesde: Date): Promise<number> {
+    const fechaLimite = new Date(fechaDesde.getFullYear(), fechaDesde.getMonth() + 1, 1);
     const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
-      .where('gasto.tarjetaCredito = :tarjetaId', { tarjetaId })
+      .where('gasto.tarjeta_credito_id = :tarjetaId', { tarjetaId })
       .andWhere('cuota.pagada = false')
-      .andWhere('cuota.fechaVencimiento >= :limite', { limite: fechaLimite })
-      .select('SUM(cuota.montoCuota)', 'total')
+      .andWhere('cuota.fecha_vencimiento >= :limite', { limite: fechaLimite })
+      .select('SUM(cuota.monto_cuota)', 'total')
       .getRawOne();
 
     return +(result?.total || 0);
-  }
-
-  private calcularMovimiento(gasto: Gasto, fechaActual: Date) {
-    const fechaGasto = new Date(gasto.fecha);
-    const mesesTranscurridos =
-      (fechaActual.getFullYear() - fechaGasto.getFullYear()) * 12 + (fechaActual.getMonth() - fechaGasto.getMonth());
-
-    const cuotasPendientes = Math.max(gasto.totalCuotas - mesesTranscurridos, 0);
-    const cuotaPendiente = gasto.cuotas?.find((c) => !c.pagada && new Date(c.fechaVencimiento) >= fechaActual);
-
-    const montoCuota = cuotaPendiente ? Number(cuotaPendiente.montoCuota) : gasto.monto / gasto.totalCuotas;
-
-    return {
-      fecha: gasto.fecha,
-      descripcion: gasto.descripcion,
-      cuotasPendientes,
-      montoCuota,
-      total: cuotasPendientes * montoCuota,
-    };
   }
 }
