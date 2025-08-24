@@ -61,7 +61,7 @@ export class GastosService {
         ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
       }
 
-      const gasto = m.getRepository(Gasto).create({
+      const gasto = this.gastoRepo.create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
         categoria_id: dto.categoriaId ?? null,
@@ -73,10 +73,10 @@ export class GastosService {
         es_debito_auto: false,
         debito_config_id: null,
       });
-      const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
+      const { id: gasto_id } = await m.save(gasto);
 
       // (opcional) cuota #1 por homogeneidad visual
-      const cuota = m.getRepository(Cuota).create({
+      const cuota = this.cuotaRepo.create({
         gasto_id,
         estado_id: ec.id,
         numero: 1,
@@ -84,7 +84,7 @@ export class GastosService {
         monto_cuota: dto.monto,
         moneda: dto.moneda,
       });
-      await m.getRepository(Cuota).save(cuota);
+      await m.save(cuota);
 
       return ApiResponseBuilder.success({ gastoId: gasto_id, estadoId: ec.id }, 'Gasto creado exitosamente');
     });
@@ -104,7 +104,7 @@ export class GastosService {
         ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
       }
 
-      const gasto = m.getRepository(Gasto).create({
+      const gasto = this.gastoRepo.create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
         categoria_id: dto.categoriaId ?? null,
@@ -116,7 +116,7 @@ export class GastosService {
         es_debito_auto: false,
         debito_config_id: null,
       });
-      const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
+      const { id: gasto_id } = await m.save(gasto);
 
       const n = dto.cuotas!;
       const montoCuota = this.redondeo(dto.monto / n);
@@ -132,7 +132,7 @@ export class GastosService {
           ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
         }
 
-        const c = m.getRepository(Cuota).create({
+        const c = this.cuotaRepo.create({
           gasto_id,
           estado_id: ec.id,
           numero: i + 1,
@@ -140,7 +140,7 @@ export class GastosService {
           monto_cuota: montoCuota,
           moneda: dto.moneda,
         });
-        await m.getRepository(Cuota).save(c);
+        await m.save(c);
       }
 
       return ApiResponseBuilder.success({ gastoId: gasto_id, cuotas: n }, 'Gasto en cuotas creado exitosamente');
@@ -181,7 +181,7 @@ export class GastosService {
   /** Usado por el scheduler: crea el gasto del mes desde la configuración */
   async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
-      const dc = await m.getRepository(DebitoConfig).findOne({ where: { id: debitoConfigId, activo: true } });
+      const dc = await this.debitoRepo.findOne({ where: { id: debitoConfigId, activo: true } });
       if (!dc) {
         return ApiResponseBuilder.error(404, 'Configuración de débito no encontrada o inactiva');
       }
@@ -204,7 +204,7 @@ export class GastosService {
         ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
       }
 
-      const gasto = m.getRepository(Gasto).create({
+      const gasto = this.gastoRepo.create({
         usuario_id: dc.usuario_id,
         tarjeta_id: dc.tarjeta_id,
         categoria_id: dc.categoria_id ?? null,
@@ -218,7 +218,7 @@ export class GastosService {
       });
 
       try {
-        const { id } = await m.getRepository(Gasto).save(gasto);
+        const { id } = await m.save(gasto);
         return ApiResponseBuilder.success(
           { gastoId: id, estadoId: ec.id },
           'Gasto por débito automático creado exitosamente'
@@ -234,7 +234,7 @@ export class GastosService {
 
   // ---------- helpers ----------
   private async findTarjetaDelUsuario(m: any, tarjetaId: number, usuarioId: number) {
-    const tarjeta = await m.getRepository(TarjetaCredito).findOne({
+    const tarjeta = await this.tarjetaRepo.findOne({
       where: { id: tarjetaId },
       relations: ['usuario'],
     });
@@ -245,15 +245,15 @@ export class GastosService {
   }
 
   private async findEstadosOrdenados(m: any, tarjetaId: number) {
-    return m.getRepository(EstadoCuenta).find({
+    return this.estadoRepo.find({
       where: { tarjeta_id: tarjetaId },
       order: { fecha_cierre: 'ASC' },
     });
   }
 
   /** Criterio de asignación por rango (inicio, fin] */
-  private estadoParaFecha(fecha: Date, estados: EstadoCuenta) {
-    for (const e of estados as any as EstadoCuenta[]) {
+  private estadoParaFecha(fecha: Date, estados: EstadoCuenta[]) {
+    for (const e of estados) {
       const ini = new Date(e.inicio_periodo); // excluyente
       const fin = new Date(e.fin_periodo); // incluyente
       if (fecha > ini && fecha <= fin) return e;
