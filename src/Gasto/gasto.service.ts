@@ -2,8 +2,8 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cuota } from 'src/Cuota/cuota.entity';
-import { DebitoConfig } from 'src/DebitoConfig/debito-config.entity';
 import { EstadoCuenta } from 'src/EstadoCuenta/estado-cuenta.entity';
+import { DebitoConfigService } from 'src/DebitoConfig/debito-config.service';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { Repository, DataSource } from 'typeorm';
 import { Gasto } from './gasto.entity';
@@ -19,9 +19,9 @@ export class GastosService {
     private readonly ds: DataSource,
     @InjectRepository(Gasto) private readonly gastoRepo: Repository<Gasto>,
     @InjectRepository(Cuota) private readonly cuotaRepo: Repository<Cuota>,
-    @InjectRepository(DebitoConfig) private readonly debitoRepo: Repository<DebitoConfig>,
     @InjectRepository(EstadoCuenta) private readonly estadoRepo: Repository<EstadoCuenta>,
-    @InjectRepository(TarjetaCredito) private readonly tarjetaRepo: Repository<TarjetaCredito>
+    @InjectRepository(TarjetaCredito) private readonly tarjetaRepo: Repository<TarjetaCredito>,
+    private readonly debitoConfigService: DebitoConfigService
   ) {}
 
   // ---------- Entrada única ----------
@@ -161,7 +161,23 @@ export class GastosService {
         ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
       }
 
-      const gasto = m.getRepository(Gasto).create({
+      // 1. Crear la configuración de débito
+      const configResponse = await this.debitoConfigService.createDebitoConfig({
+        usuarioId: dto.usuarioId,
+        tarjetaId: dto.tarjetaId,
+        categoriaId: dto.categoriaId,
+        descripcion: dto.descripcion,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fechaSuscripcion: new Date(dto.fechaCompra),
+      });
+
+      if (!configResponse.ok) {
+        return configResponse;
+      }
+
+      // 2. Crear el gasto asociado a la config
+      const gasto = this.gastoRepo.create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
         categoria_id: dto.categoriaId ?? null,
@@ -171,17 +187,25 @@ export class GastosService {
         moneda: dto.moneda,
         fecha_compra: new Date(dto.fechaCompra),
         es_debito_auto: true,
-        debito_config_id: null,
+        debito_config_id: configResponse.data.configId,
       });
-      const { id } = await m.getRepository(Gasto).save(gasto);
-      return ApiResponseBuilder.success({ gastoId: id, estadoId: ec.id }, 'Gasto por débito creado exitosamente');
+      const { id } = await m.save(gasto);
+
+      return ApiResponseBuilder.success(
+        {
+          gastoId: id,
+          estadoId: ec.id,
+          configId: configResponse.data.configId,
+        },
+        'Gasto por débito y suscripción creados exitosamente'
+      );
     });
   }
 
   /** Usado por el scheduler: crea el gasto del mes desde la configuración */
   async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
-      const dc = await this.debitoRepo.findOne({ where: { id: debitoConfigId, activo: true } });
+      const dc = await this.debitoConfigService.getActiveConfig(debitoConfigId);
       if (!dc) {
         return ApiResponseBuilder.error(404, 'Configuración de débito no encontrada o inactiva');
       }
