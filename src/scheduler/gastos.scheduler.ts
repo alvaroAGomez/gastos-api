@@ -36,7 +36,7 @@ export class GastosScheduler {
       const aplicaMes = diffMeses >= 0 && diffMeses % per === 0;
 
       if (aplicaMes && hoy.getUTCDate() === diaObjetivo) {
-        await this.gastos.crearDesdeDebitoConfig(dc.id);
+        await this.gastos.createGastoFromDebitoConfig(dc.id);
       }
     }
   }

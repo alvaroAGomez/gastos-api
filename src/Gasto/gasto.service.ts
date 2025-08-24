@@ -9,6 +9,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
+import { CuotaService } from 'src/Cuota/cuota.service';
 
 export type Moneda = 'ARS' | 'USD';
 export type TipoGasto = 'normal' | 'cuotas' | 'debito';
@@ -21,7 +22,8 @@ export class GastosService {
     @InjectRepository(Cuota) private readonly cuotaRepo: Repository<Cuota>,
     @InjectRepository(EstadoCuenta) private readonly estadoRepo: Repository<EstadoCuenta>,
     @InjectRepository(TarjetaCredito) private readonly tarjetaRepo: Repository<TarjetaCredito>,
-    private readonly debitoConfigService: DebitoConfigService
+    private readonly debitoConfigService: DebitoConfigService,
+    private readonly cuotaService: CuotaService
   ) {}
 
   // ---------- Entrada única ----------
@@ -47,7 +49,7 @@ export class GastosService {
   }
 
   // ---------- Casos ----------
-  private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+  /*   private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -89,8 +91,55 @@ export class GastosService {
       return ApiResponseBuilder.success({ gastoId: gasto_id, estadoId: ec.id }, 'Gasto creado exitosamente');
     });
   }
+ */
 
-  private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+  private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+    return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
+
+      const fecha = new Date(dto.fechaCompra);
+      let ec = this.estadoParaFecha(fecha, estados);
+      if (!ec) return ApiResponseBuilder.error(400, 'No hay estado de cuenta para esa fecha');
+      if (ec.estado === 'cerrado') {
+        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      }
+
+      const gasto = this.gastoRepo.create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ec.id,
+        descripcion: dto.descripcion ?? null,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: fecha,
+        es_debito_auto: false,
+        debito_config_id: null,
+      });
+      const { id: gasto_id } = await m.save(gasto);
+
+      // ✅ Delego creación de cuotas (1 cuota)
+      const respCuotas = await this.cuotaService.createCuotasForGasto(m, {
+        gastoId: gasto_id,
+        moneda: dto.moneda,
+        montoTotal: dto.monto,
+        cantidad: 1,
+        fechaCompra: fecha,
+        estados,
+        ecCompra: ec,
+        numeroInicial: 1,
+      });
+      if (!respCuotas.ok) return respCuotas;
+
+      return ApiResponseBuilder.success(
+        { gastoId: gasto_id, estadoId: ec.id, cuotas: respCuotas.data.length },
+        'Gasto creado exitosamente'
+      );
+    });
+  }
+
+  /*   private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -144,6 +193,52 @@ export class GastosService {
       }
 
       return ApiResponseBuilder.success({ gastoId: gasto_id, cuotas: n }, 'Gasto en cuotas creado exitosamente');
+    });
+  } */
+
+  private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+    return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
+
+      const fechaCompra = new Date(dto.fechaCompra);
+      let ecCompra = this.estadoParaFecha(fechaCompra, estados);
+      if (!ecCompra) return ApiResponseBuilder.error(400, 'No hay estado para esa fecha');
+      if (ecCompra.estado === 'cerrado') {
+        ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
+      }
+
+      const gasto = this.gastoRepo.create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ecCompra.id,
+        descripcion: dto.descripcion ?? null,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: fechaCompra,
+        es_debito_auto: false,
+        debito_config_id: null,
+      });
+      const { id: gasto_id } = await m.save(gasto);
+
+      // ✅ Delego creación de n cuotas
+      const respCuotas = await this.cuotaService.createCuotasForGasto(m, {
+        gastoId: gasto_id,
+        moneda: dto.moneda,
+        montoTotal: dto.monto,
+        cantidad: dto.cuotas!,
+        fechaCompra,
+        estados,
+        ecCompra,
+        numeroInicial: 1,
+      });
+      if (!respCuotas.ok) return respCuotas;
+
+      return ApiResponseBuilder.success(
+        { gastoId: gasto_id, cuotas: respCuotas.data.length },
+        'Gasto en cuotas creado exitosamente'
+      );
     });
   }
 
@@ -291,32 +386,5 @@ export class GastosService {
   }
   private failNoAbierto(): never {
     throw new BadRequestException('No hay estado abierto posterior disponible');
-  }
-
-  private clampDia(d: Date) {
-    const y = d.getUTCFullYear(),
-      m = d.getUTCMonth(),
-      day = d.getUTCDate();
-    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    return new Date(Date.UTC(y, m, Math.min(day, last)));
-  }
-  private addMonths(base: Date, months: number) {
-    const y = base.getUTCFullYear(),
-      m = base.getUTCMonth() + months,
-      day = base.getUTCDate();
-    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    return new Date(Date.UTC(y, m, Math.min(day, last)));
-  }
-  private generarFechasCuotas(fechaCompra: Date, estados: EstadoCuenta[], n: number, ecCompra: EstadoCuenta) {
-    const primera =
-      fechaCompra <= new Date(ecCompra.fecha_cierre)
-        ? this.clampDia(new Date(fechaCompra))
-        : this.addMonths(this.clampDia(new Date(fechaCompra)), 1);
-    const out = [primera];
-    for (let i = 1; i < n; i++) out.push(this.addMonths(primera, i));
-    return out;
-  }
-  private redondeo(n: number) {
-    return Math.round(n * 100) / 100;
   }
 }
