@@ -10,6 +10,7 @@ import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
 import { CuotaService } from 'src/Cuota/cuota.service';
+import { EstadoCuentaService } from 'src/EstadoCuenta/estado-cuenta.service';
 
 export type Moneda = 'ARS' | 'USD';
 export type TipoGasto = 'normal' | 'cuotas' | 'debito';
@@ -23,7 +24,8 @@ export class GastosService {
     @InjectRepository(EstadoCuenta) private readonly estadoRepo: Repository<EstadoCuenta>,
     @InjectRepository(TarjetaCredito) private readonly tarjetaRepo: Repository<TarjetaCredito>,
     private readonly debitoConfigService: DebitoConfigService,
-    private readonly cuotaService: CuotaService
+    private readonly cuotaService: CuotaService,
+    private readonly estadoCuentaService: EstadoCuentaService
   ) {}
 
   // ---------- Entrada única ----------
@@ -48,52 +50,7 @@ export class GastosService {
     }
   }
 
-  // ---------- Casos ----------
-  /*   private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
-    return this.ds.transaction(async (m) => {
-      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
-      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
-
-      const fecha = new Date(dto.fechaCompra);
-      let ec = this.estadoParaFecha(fecha, estados);
-      if (!ec) {
-        return ApiResponseBuilder.error(400, 'No hay estado de cuenta para esa fecha');
-      }
-      if (ec.estado === 'cerrado') {
-        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
-      }
-
-      const gasto = this.gastoRepo.create({
-        usuario_id: dto.usuarioId,
-        tarjeta_id: dto.tarjetaId,
-        categoria_id: dto.categoriaId ?? null,
-        estado_id: ec.id,
-        descripcion: dto.descripcion ?? null,
-        monto: dto.monto,
-        moneda: dto.moneda,
-        fecha_compra: new Date(dto.fechaCompra),
-        es_debito_auto: false,
-        debito_config_id: null,
-      });
-      const { id: gasto_id } = await m.save(gasto);
-
-      // (opcional) cuota #1 por homogeneidad visual
-      const cuota = this.cuotaRepo.create({
-        gasto_id,
-        estado_id: ec.id,
-        numero: 1,
-        fecha_cuota: new Date(dto.fechaCompra),
-        monto_cuota: dto.monto,
-        moneda: dto.moneda,
-      });
-      await m.save(cuota);
-
-      return ApiResponseBuilder.success({ gastoId: gasto_id, estadoId: ec.id }, 'Gasto creado exitosamente');
-    });
-  }
- */
-
-  private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+  private async createGastoNormal1(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
@@ -139,21 +96,71 @@ export class GastosService {
     });
   }
 
-  /*   private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+  private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
+      const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
+
+      const fecha = new Date(dto.fechaCompra);
+
+      // 1) Asegurar el estado del mes de la compra (on-demand)
+      await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fecha);
+
+      // 2) Refrescar estados y resolver EC
+      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
+      let ec = this.estadoParaFecha(fecha, estados);
+      if (!ec) return ApiResponseBuilder.error(400, 'No hay estado de cuenta para esa fecha');
+      if (ec.estado === 'cerrado') {
+        ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
+      }
+
+      // 3) Crear gasto
+      const gasto = this.gastoRepo.create({
+        usuario_id: dto.usuarioId,
+        tarjeta_id: dto.tarjetaId,
+        categoria_id: dto.categoriaId ?? null,
+        estado_id: ec.id,
+        descripcion: dto.descripcion ?? null,
+        monto: dto.monto,
+        moneda: dto.moneda,
+        fecha_compra: fecha,
+        es_debito_auto: false,
+        debito_config_id: null,
+      });
+      const { id: gasto_id } = await m.save(gasto);
+
+      // 4) Delegar creación de 1 cuota
+      const respCuotas = await this.cuotaService.createCuotasForGasto(m, {
+        gastoId: gasto_id,
+        moneda: dto.moneda,
+        montoTotal: dto.monto,
+        cantidad: 1,
+        fechaCompra: fecha,
+        estados,
+        ecCompra: ec,
+        numeroInicial: 1,
+      });
+      if (!respCuotas.ok) return respCuotas;
+
+      return ApiResponseBuilder.success(
+        { gastoId: gasto_id, estadoId: ec.id, cuotas: respCuotas.data.length },
+        'Gasto creado exitosamente'
+      );
+    });
+  }
+
+  private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+    return this.ds.transaction(async (m) => {
+      // 1) validar usuario/tarjeta y obtener EC de la 1ª cuota (por fecha_compra)
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
       const fechaCompra = new Date(dto.fechaCompra);
       let ecCompra = this.estadoParaFecha(fechaCompra, estados);
-      if (!ecCompra) {
-        return ApiResponseBuilder.error(400, 'No hay estado para esa fecha');
-      }
-      if (ecCompra.estado === 'cerrado') {
-        ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
-      }
+      if (!ecCompra) return ApiResponseBuilder.error(400, 'No hay estado para esa fecha');
+      if (ecCompra.estado === 'cerrado') ecCompra = this.siguienteAbierto(ecCompra, estados) ?? this.failNoAbierto();
 
-      const gasto = this.gastoRepo.create({
+      // 2) crear el gasto “madre” (solo valida datos del gasto)
+      const gasto = m.getRepository(Gasto).create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
         categoria_id: dto.categoriaId ?? null,
@@ -161,42 +168,31 @@ export class GastosService {
         descripcion: dto.descripcion ?? null,
         monto: dto.monto,
         moneda: dto.moneda,
-        fecha_compra: new Date(dto.fechaCompra),
+        fecha_compra: fechaCompra,
         es_debito_auto: false,
         debito_config_id: null,
       });
-      const { id: gasto_id } = await m.save(gasto);
+      const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
 
-      const n = dto.cuotas!;
-      const montoCuota = this.redondeo(dto.monto / n);
-      const fechas = this.generarFechasCuotas(fechaCompra, estados, n, ecCompra);
+      // 3) delegar TODA la lógica de cuotas
 
-      for (let i = 0; i < n; i++) {
-        const f = fechas[i];
-        let ec = this.estadoParaFecha(f, estados);
-        if (!ec) {
-          return ApiResponseBuilder.error(400, `No hay estado para cuota #${i + 1}`);
-        }
-        if (ec.estado === 'cerrado') {
-          ec = this.siguienteAbierto(ec, estados) ?? this.failNoAbierto();
-        }
+      const respCuotas = await this.cuotaService.crearPlanParaGasto(m, {
+        gastoId: gasto_id,
+        tarjetaId: dto.tarjetaId,
+        moneda: dto.moneda,
+        montoTotal: dto.monto,
+        cantidad: dto.cuotas!,
+        fechaCompra: new Date(dto.fechaCompra),
+        modo: 'crear',
+      });
 
-        const c = this.cuotaRepo.create({
-          gasto_id,
-          estado_id: ec.id,
-          numero: i + 1,
-          fecha_cuota: f,
-          monto_cuota: montoCuota,
-          moneda: dto.moneda,
-        });
-        await m.save(c);
-      }
-
-      return ApiResponseBuilder.success({ gastoId: gasto_id, cuotas: n }, 'Gasto en cuotas creado exitosamente');
+      return ApiResponseBuilder.success(
+        { gastoId: gasto_id, cuotas: respCuotas.data.length },
+        'Gasto en cuotas creado exitosamente'
+      );
     });
-  } */
-
-  private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
+  }
+  private async createGastoCuotas2(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const estados = await this.findEstadosOrdenados(m, tarjeta.id);

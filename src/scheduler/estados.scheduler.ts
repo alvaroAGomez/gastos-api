@@ -15,7 +15,7 @@ export class EstadosScheduler {
       .createQueryBuilder()
       .update(EstadoCuenta)
       .set({ estado: 'cerrado' })
-      .where('estado = :e', { e: 'confirmado' })
+      .where('estado <> :cerrado', { cerrado: 'cerrado' })
       .andWhere('fecha_cierre < CURRENT_DATE()')
       .execute();
   }

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { TarjetaCredito } from './tarjeta-credito.entity';
 import { CreateTarjetaCreditoDto } from './dto/create-tarjeta-credito.dto';
 import { Usuario } from '../Usuario/usuario.entity';
@@ -10,10 +10,12 @@ import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
 import { Cuota } from '../Cuota/cuota.entity';
 import { Gasto } from '../Gasto/gasto.entity';
 import { ApiResponseBuilder } from 'src/common/response/api-response.builder';
+import { EstadoCuentaService } from 'src/EstadoCuenta/estado-cuenta.service';
 
 @Injectable()
 export class TarjetaCreditoService {
   constructor(
+    private readonly ds: DataSource,
     @InjectRepository(TarjetaCredito)
     private readonly tarjetaRepo: Repository<TarjetaCredito>,
     @InjectRepository(Banco)
@@ -21,10 +23,11 @@ export class TarjetaCreditoService {
     @InjectRepository(Cuota)
     private readonly cuotaRepo: Repository<Cuota>,
     @InjectRepository(Gasto)
-    private readonly gastoRepo: Repository<Gasto>
+    private readonly gastoRepo: Repository<Gasto>,
+    private readonly estadoCuentaService: EstadoCuentaService
   ) {}
 
-  async createTarjetaCredito(dto: CreateTarjetaCreditoDto, usuario: Usuario) {
+  async createTarjetaCredito2(dto: CreateTarjetaCreditoDto, usuario: Usuario) {
     try {
       const banco = await this.bancoRepo.findOneBy({ id: dto.bancoId });
       if (!usuario || !banco) {
@@ -45,6 +48,54 @@ export class TarjetaCreditoService {
       });
 
       const savedTarjeta = await this.tarjetaRepo.save(tarjeta);
+      return ApiResponseBuilder.success(savedTarjeta, 'Tarjeta de crédito creada exitosamente');
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return ApiResponseBuilder.error(400, error.message);
+      }
+      if (error instanceof NotFoundException) {
+        return ApiResponseBuilder.error(404, error.message);
+      }
+      return ApiResponseBuilder.error(500, 'Error al crear la tarjeta de crédito');
+    }
+  }
+
+  async createTarjetaCredito(dto: CreateTarjetaCreditoDto, usuario: Usuario) {
+    try {
+      const banco = await this.bancoRepo.findOneBy({ id: dto.bancoId });
+      if (!usuario || !banco) throw new NotFoundException('Usuario o banco no encontrado');
+
+      await this.validarTarjetaDuplicada(dto, usuario.id);
+
+      const ultimos4 = (dto.numeroTarjeta || '').slice(-4);
+
+      // ⚠️ Todo en una transacción para que tarjeta + estado inicial queden atómicos
+      const savedTarjeta = await this.ds.transaction(async (m) => {
+        const tarjeta = m.getRepository(TarjetaCredito).create({
+          nombre: dto.nombreTarjeta,
+          ultimos4Digitos: ultimos4,
+          limite_total: dto.limiteCredito,
+          dia_cierre_default: dto.diaCierreDefault,
+          dia_vencimiento_default: dto.diaVencimientoDefault,
+          banco, // si preferís, podés setear banco_id: banco.id
+          usuario, // idem: usuario_id: usuario.id
+        });
+
+        const tc = await m.getRepository(TarjetaCredito).save(tarjeta);
+
+        // 👇 Estado inicial (mes actual). Usa el mismo manager (misma TX).
+        await this.estadoCuentaService.ensureEstadoParaMes(
+          m,
+          tc,
+          new Date() /* hoy */,
+          /* feriados */ undefined,
+          /* política día no hábil */ 'siguiente',
+          /* vencimiento en mes siguiente */ true
+        );
+
+        return tc;
+      });
+
       return ApiResponseBuilder.success(savedTarjeta, 'Tarjeta de crédito creada exitosamente');
     } catch (error) {
       if (error instanceof BadRequestException) {
