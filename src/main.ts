@@ -33,7 +33,7 @@ async function bootstrap() {
     .addBearerAuth()
     .addTag('Auth')
     .addTag('Banco')
-    .addTag('Categoria Gastos')
+    .addTag('Categorías')
     .addTag('Cuota')
     .addTag('Gastos')
     .addTag('Tarjeta Crédito')

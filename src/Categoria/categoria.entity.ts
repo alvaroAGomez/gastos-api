@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { Gasto } from '../Gasto/gasto.entity';
 
@@ -23,6 +23,7 @@ export class Categoria {
   icono: string;
 
   @ManyToOne(() => Usuario, (usuario) => usuario.categorias)
+  @JoinColumn({ name: 'usuario_id' })
   usuario: Usuario;
 
   @OneToMany(() => Gasto, (gasto) => gasto.categoria)

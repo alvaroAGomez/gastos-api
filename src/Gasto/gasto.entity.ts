@@ -1,12 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, Index, JoinColumn } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
 import { Categoria } from '../Categoria/categoria.entity';
 import { Cuota } from '../Cuota/cuota.entity';
 import { EstadoCuenta } from '../EstadoCuenta/estado-cuenta.entity';
+import { DebitoConfig } from 'src/DebitoConfig/debito-config.entity';
 
 @Entity('gasto')
-@Index('uq_gasto_debito_periodo', ['debito_config_id', 'periodo_mes'], { unique: true }) // 👈 idempotencia
+@Index('uq_gasto_debito_periodo', ['debito_config_id', 'periodo_mes'], { unique: true })
 export class Gasto {
   @PrimaryGeneratedColumn()
   id: number;
@@ -39,15 +40,19 @@ export class Gasto {
   es_debito_auto: boolean;
 
   @ManyToOne(() => Usuario)
+  @JoinColumn({ name: 'usuario_id' })
   usuario: Usuario;
 
   @ManyToOne(() => TarjetaCredito)
+  @JoinColumn({ name: 'tarjeta_id' })
   tarjeta: TarjetaCredito;
 
   @ManyToOne(() => Categoria)
+  @JoinColumn({ name: 'categoria_id' })
   categoria: Categoria;
 
   @ManyToOne(() => EstadoCuenta)
+  @JoinColumn({ name: 'estado_id' })
   estado: EstadoCuenta;
 
   @OneToMany(() => Cuota, (cuota) => cuota.gasto)
@@ -55,6 +60,10 @@ export class Gasto {
 
   @Column({ type: 'bigint', unsigned: true, name: 'debito_config_id', nullable: true })
   debito_config_id: number | null;
+
+  @ManyToOne(() => DebitoConfig)
+  @JoinColumn({ name: 'debito_config_id' })
+  debitoConfig: DebitoConfig;
 
   // Columna generada en MySQL (opcional pero recomendado). Si tu DB ya la tiene, dejalo.
   @Column({

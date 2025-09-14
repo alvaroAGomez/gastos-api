@@ -1,4 +1,4 @@
-import { categoriaModule } from './Categoria/categoria.module';
+import { CategoriaModule } from './Categoria/categoria.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -10,6 +10,7 @@ import { classes } from '@automapper/classes';
 import { AutomapperModule } from '@automapper/nestjs';
 import { CuotaModule } from './Cuota/cuota.module';
 import { BancoModule } from './Banco/banco.module';
+import { DebitoConfigModule } from './DebitoConfig/debito-config.module';
 import { CustomNamingStrategy } from './common/naming.strategy';
 import { EstadosModule } from './EstadoCuenta/estado-cuenta.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -31,7 +32,7 @@ import { ScheduleModule } from '@nestjs/schedule';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true, // config.get<string>('NODE_ENV') !== 'production', // no sincronices en prod
+        synchronize: false, // Usar migraciones en lugar de synchronize
         /*         logging: true,
         logger: 'advanced-console', */
         namingStrategy: new CustomNamingStrategy(),
@@ -42,11 +43,12 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
     UsersModule,
     TarjetaCreditoModule,
-    categoriaModule,
+    CategoriaModule,
     GastoModule,
     AuthModule,
     CuotaModule,
     BancoModule,
+    DebitoConfigModule,
     EstadosModule,
     ScheduleModule.forRoot(),
   ],

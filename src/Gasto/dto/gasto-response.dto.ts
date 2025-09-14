@@ -47,7 +47,7 @@ export class GastoResponseDto {
   @ApiPropertyOptional()
   frecuencia?: string;
 
-  static fromEntity(gasto: Gasto): GastoResponseDto {
+  /* static fromEntity(gasto: Gasto): GastoResponseDto {
     const response = new GastoResponseDto();
     response.id = gasto.id;
     response.monto = gasto.monto;
@@ -73,5 +73,5 @@ export class GastoResponseDto {
     }
 
     return response;
-  }
+  } */
 }

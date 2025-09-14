@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Gasto } from '../Gasto/gasto.entity';
 import { EstadoCuenta } from '../EstadoCuenta/estado-cuenta.entity';
 
@@ -26,8 +26,10 @@ export class Cuota {
   moneda: string;
 
   @ManyToOne(() => Gasto, (gasto) => gasto.cuotas)
+  @JoinColumn({ name: 'gasto_id' })
   gasto: Gasto;
 
   @ManyToOne(() => EstadoCuenta)
+  @JoinColumn({ name: 'estado_id' })
   estado: EstadoCuenta;
 }

@@ -26,8 +26,8 @@ export class CategoriaService {
         .where('LOWER(TRIM(categoria.nombre)) = LOWER(TRIM(:nombre))', {
           nombre: createCategoriaDto.nombre,
         })
-        .andWhere('(categoria.usuario_id = :usuarioId OR categoria.es_global = true)', {
-          usuarioId: usuario.id,
+        .andWhere('(categoria.usuario_id = :usuario_id OR categoria.es_global = true)', {
+          usuario_id: usuario.id,
         })
         .getOne();
 
@@ -45,7 +45,7 @@ export class CategoriaService {
       const response: CategoriaResponseDto = {
         id: saved.id,
         nombre: saved.nombre,
-        usuarioId: saved.usuario?.id || null,
+        usuario_id: saved.usuario?.id || null,
       };
 
       return ApiResponseBuilder.success(response, 'Categoría creada exitosamente');
@@ -59,15 +59,17 @@ export class CategoriaService {
       const categorias = await this.categoriaRepository
         .createQueryBuilder('categoria')
         .leftJoinAndSelect('categoria.usuario', 'usuario')
-        .where('usuario.id = :usuarioId OR categoria.es_global = true', {
-          usuarioId: usuario.id,
+        .where('usuario.id = :usuario_id OR categoria.es_global = true', {
+          usuario_id: usuario.id,
         })
         .getMany();
 
       const response = categorias.map((cat) => ({
         id: cat.id,
         nombre: cat.nombre,
-        usuarioId: cat.usuario?.id || null,
+        color_hex: cat.color_hex,
+        icono: cat.icono,
+        usuario_id: cat.usuario?.id || null,
       }));
 
       return ApiResponseBuilder.success(response, 'Categorías obtenidas exitosamente');
@@ -81,13 +83,15 @@ export class CategoriaService {
       const categorias = await this.categoriaRepository
         .createQueryBuilder('categoria')
         .leftJoinAndSelect('categoria.usuario', 'usuario')
-        .where('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .where('usuario.id = :usuario_id', { usuario_id: usuario.id })
         .getMany();
 
       const response = categorias.map((cat) => ({
         id: cat.id,
         nombre: cat.nombre,
-        usuarioId: cat.usuario.id,
+        color_hex: cat.color_hex,
+        icono: cat.icono,
+        usuario_id: cat.usuario.id,
       }));
 
       return ApiResponseBuilder.success(response, 'Categorías del usuario obtenidas exitosamente');
@@ -106,7 +110,9 @@ export class CategoriaService {
       const response = categorias.map((cat) => ({
         id: cat.id,
         nombre: cat.nombre,
-        usuarioId: null,
+        color_hex: cat.color_hex,
+        icono: cat.icono,
+        usuario_id: null,
       }));
 
       return ApiResponseBuilder.success(response, 'Categorías globales obtenidas exitosamente');
@@ -121,8 +127,8 @@ export class CategoriaService {
         .createQueryBuilder('categoria')
         .leftJoinAndSelect('categoria.usuario', 'usuario')
         .where('categoria.id = :id', { id })
-        .andWhere('(usuario.id = :usuarioId OR categoria.es_global = true)', {
-          usuarioId: usuario.id,
+        .andWhere('(usuario.id = :usuario_id OR categoria.es_global = true)', {
+          usuario_id: usuario.id,
         })
         .getOne();
 
@@ -133,7 +139,7 @@ export class CategoriaService {
       const response: CategoriaResponseDto = {
         id: categoria.id,
         nombre: categoria.nombre,
-        usuarioId: categoria.usuario?.id || null,
+        usuario_id: categoria.usuario?.id || null,
       };
 
       return ApiResponseBuilder.success(response, 'Categoría encontrada exitosamente');
@@ -152,7 +158,7 @@ export class CategoriaService {
         .createQueryBuilder('categoria')
         .leftJoinAndSelect('categoria.usuario', 'usuario')
         .where('categoria.id = :id', { id })
-        .andWhere('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .andWhere('usuario.id = :usuario_id', { usuario_id: usuario.id })
         .getOne();
 
       if (!categoria) {
@@ -167,8 +173,8 @@ export class CategoriaService {
             nombre: updateCategoriaDto.nombre,
           })
           .andWhere('categoria.id != :id', { id })
-          .andWhere('(categoria.usuario_id = :usuarioId OR categoria.es_global = true)', {
-            usuarioId: usuario.id,
+          .andWhere('(categoria.usuario_id = :usuario_id OR categoria.es_global = true)', {
+            usuario_id: usuario.id,
           })
           .getOne();
 
@@ -183,7 +189,7 @@ export class CategoriaService {
       const response: CategoriaResponseDto = {
         id: saved.id,
         nombre: saved.nombre,
-        usuarioId: saved.usuario?.id || null,
+        usuario_id: saved.usuario?.id || null,
       };
 
       return ApiResponseBuilder.success(response, 'Categoría actualizada exitosamente');
@@ -198,7 +204,7 @@ export class CategoriaService {
         .createQueryBuilder('categoria')
         .leftJoinAndSelect('categoria.usuario', 'usuario')
         .where('categoria.id = :id', { id })
-        .andWhere('usuario.id = :usuarioId', { usuarioId: usuario.id })
+        .andWhere('usuario.id = :usuario_id', { usuario_id: usuario.id })
         .getOne();
 
       if (!categoria) {

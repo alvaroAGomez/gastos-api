@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
 import { Categoria } from '../Categoria/categoria.entity';
@@ -36,12 +36,15 @@ export class DebitoConfig {
   observacion: string;
 
   @ManyToOne(() => Usuario)
+  @JoinColumn({ name: 'usuario_id' })
   usuario: Usuario;
 
   @ManyToOne(() => TarjetaCredito, (tarjeta) => tarjeta.debitoConfigs)
+  @JoinColumn({ name: 'tarjeta_id' })
   tarjeta: TarjetaCredito;
 
   @ManyToOne(() => Categoria)
+  @JoinColumn({ name: 'categoria_id' })
   categoria: Categoria;
 
   @Column({ type: 'enum', enum: ['mensual', 'bimestral', 'trimestral', 'semestral', 'anual'], default: 'mensual' })

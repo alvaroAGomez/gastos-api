@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { Usuario } from '../Usuario/usuario.entity';
 import { Banco } from '../Banco/banco.entity';
 import { Gasto } from '../Gasto/gasto.entity';
@@ -13,9 +13,11 @@ export class TarjetaCredito {
   nombre: string;
 
   @ManyToOne(() => Usuario, (usuario) => usuario.tarjetasCredito)
+  @JoinColumn({ name: 'usuario_id' })
   usuario: Usuario;
 
   @ManyToOne(() => Banco, (banco) => banco.tarjetas)
+  @JoinColumn({ name: 'banco_id' })
   banco: Banco;
 
   @Column('decimal', { precision: 10, scale: 2 })

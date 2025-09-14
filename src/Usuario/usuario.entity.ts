@@ -1,6 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
 import { TarjetaCredito } from '../TarjetaCredito/tarjeta-credito.entity';
-import { Banco } from '../Banco/banco.entity';
 import { Categoria } from '../Categoria/categoria.entity';
 
 @Entity('usuario')
@@ -22,9 +21,6 @@ export class Usuario {
 
   @OneToMany(() => TarjetaCredito, (tarjeta) => tarjeta.usuario)
   tarjetasCredito: TarjetaCredito[];
-
-  @OneToMany(() => Banco, (banco) => banco.usuario)
-  bancos: Banco[];
 
   @OneToMany(() => Categoria, (categoria) => categoria.usuario)
   categorias: Categoria[];

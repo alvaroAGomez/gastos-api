@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { Banco } from './banco.entity';
 import { CreateBancoDto } from './dto/create-banco.dto';
 import { UpdateBancoDto } from './dto/update-banco.dto';
-import { Usuario } from '../Usuario/usuario.entity';
 import { BancoResponseDto } from './dto/banco-response.dto';
 import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
 
@@ -15,12 +14,11 @@ export class BancoService {
     private readonly bancoRepository: Repository<Banco>
   ) {}
 
-  async createBanco(createBancoDto: CreateBancoDto, usuario: Usuario): Promise<ApiResponse<BancoResponseDto>> {
+  async createBanco(createBancoDto: CreateBancoDto): Promise<ApiResponse<BancoResponseDto>> {
     try {
       const banco = this.bancoRepository.create({
         nombre: createBancoDto.nombre,
         logo_url: createBancoDto.logo_url,
-        usuario,
       });
 
       const savedBanco = await this.bancoRepository.save(banco);
@@ -28,7 +26,6 @@ export class BancoService {
         id: savedBanco.id,
         nombre: savedBanco.nombre,
         logo_url: savedBanco.logo_url,
-        usuario_id: savedBanco.usuario.id,
       };
 
       return ApiResponseBuilder.success(response, 'Banco creado exitosamente');
@@ -37,18 +34,14 @@ export class BancoService {
     }
   }
 
-  async getBancos(usuario: Usuario): Promise<ApiResponse<BancoResponseDto[]>> {
+  async getBancos(): Promise<ApiResponse<BancoResponseDto[]>> {
     try {
-      const bancos = await this.bancoRepository.find({
-        where: { usuario: { id: usuario.id } },
-        relations: ['usuario'],
-      });
+      const bancos = await this.bancoRepository.find();
 
       const response = bancos.map((banco) => ({
         id: banco.id,
         nombre: banco.nombre,
         logo_url: banco.logo_url,
-        usuario_id: banco.usuario.id,
       }));
 
       return ApiResponseBuilder.success(response, 'Bancos obtenidos exitosamente');
@@ -57,11 +50,10 @@ export class BancoService {
     }
   }
 
-  async getById(id: number, usuario: Usuario): Promise<ApiResponse<BancoResponseDto>> {
+  async getById(id: number): Promise<ApiResponse<BancoResponseDto>> {
     try {
       const banco = await this.bancoRepository.findOne({
-        where: { id, usuario: { id: usuario.id } },
-        relations: ['usuario'],
+        where: { id },
       });
 
       if (!banco) {
@@ -72,7 +64,6 @@ export class BancoService {
         id: banco.id,
         nombre: banco.nombre,
         logo_url: banco.logo_url,
-        usuario_id: banco.usuario.id,
       };
 
       return ApiResponseBuilder.success(response, 'Banco encontrado exitosamente');
@@ -81,13 +72,9 @@ export class BancoService {
     }
   }
 
-  async updateBanco(
-    id: number,
-    updateBancoDto: UpdateBancoDto,
-    usuario: Usuario
-  ): Promise<ApiResponse<BancoResponseDto>> {
+  async updateBanco(id: number, updateBancoDto: UpdateBancoDto): Promise<ApiResponse<BancoResponseDto>> {
     try {
-      const exists = await this.getById(id, usuario);
+      const exists = await this.getById(id);
       if (!exists.ok) {
         return exists;
       }
@@ -95,7 +82,6 @@ export class BancoService {
       const updated = await this.bancoRepository.preload({
         id: id,
         ...updateBancoDto,
-        usuario,
       });
 
       if (!updated) {
@@ -107,7 +93,6 @@ export class BancoService {
         id: savedBanco.id,
         nombre: savedBanco.nombre,
         logo_url: savedBanco.logo_url,
-        usuario_id: savedBanco.usuario.id,
       };
 
       return ApiResponseBuilder.success(response, 'Banco actualizado exitosamente');
@@ -116,10 +101,10 @@ export class BancoService {
     }
   }
 
-  async deleteBanco(id: number, usuario: Usuario): Promise<ApiResponse<void>> {
+  async deleteBanco(id: number): Promise<ApiResponse<void>> {
     try {
       const bancoToDelete = await this.bancoRepository.findOne({
-        where: { id, usuario: { id: usuario.id } },
+        where: { id },
       });
 
       if (!bancoToDelete) {

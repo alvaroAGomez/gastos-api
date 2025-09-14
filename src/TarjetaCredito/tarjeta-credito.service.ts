@@ -104,7 +104,7 @@ export class TarjetaCreditoService {
       if (error instanceof NotFoundException) {
         return ApiResponseBuilder.error(404, error.message);
       }
-      return ApiResponseBuilder.error(500, 'Error al crear la tarjeta de crédito');
+      return ApiResponseBuilder.error(500, 'Error al crear la tarjeta de crédito: ' + error.message);
     }
   }
 
