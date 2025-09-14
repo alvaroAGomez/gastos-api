@@ -38,9 +38,22 @@ export class EstadoCuentaService {
     );
 
     const repo = m.getRepository(EstadoCuenta);
+
+    // Buscar primero por inicio y fin exactos
     let ec = await repo.findOne({ where: { tarjeta_id: tarjeta.id, inicio_periodo, fin_periodo } });
     if (ec) return ec;
 
+    // Si no existe, buscar por periodo que cubra la fecha (más flexible)
+    ec = await repo
+      .createQueryBuilder('ec')
+      .where('ec.tarjeta_id = :tarjetaId', { tarjetaId: tarjeta.id })
+      .andWhere('ec.inicio_periodo < :fecha', { fecha: fechaRef })
+      .andWhere('ec.fin_periodo >= :fecha', { fecha: fechaRef })
+      .getOne();
+
+    if (ec) return ec;
+
+    // Si no existe ningún estado que cubra esta fecha, crear uno nuevo
     const hoy = new Date();
     ec = repo.create({
       tarjeta_id: tarjeta.id,

@@ -33,13 +33,6 @@ export class CuotaService {
     private readonly estadoCuentaService: EstadoCuentaService
   ) {}
 
-  /**
-   * NUEVO: Crea el plan de cuotas para un gasto ya creado.
-   * - 1ª = fecha_compra; siguientes: mismo día mes +1, +2… (clamp)
-   * - Asigna estado_id por (inicio, fin]; si 'cerrado':
-   *   - modo 'crear'  -> pasa al siguiente abierto
-   *   - modo 'editar' -> error salvo forzar=true
-   */
   public async crearPlanParaGasto(manager: EntityManager, params: CrearPlanParams): Promise<ApiResponse<Cuota[]>> {
     const {
       gastoId,
@@ -65,14 +58,17 @@ export class CuotaService {
       return ApiResponseBuilder.error(404, 'Tarjeta no encontrada');
     }
 
-    // Estados de la tarjeta (ordenados)
+    // Fechas: 1ª = compra; resto +1m, +2m, ...
+    const fechas = this.generarFechasCuotas(fechaCompra, cantidad);
+
+    // Asegurar estados para todas las fechas de una vez (más eficiente)
+    await this.estadoCuentaService.ensureEstadosParaFechas(manager, tarjeta, fechas);
+
+    // Obtener estados actualizados después de crearlos
     const estados = await manager.getRepository(EstadoCuenta).find({
       where: { tarjeta_id: tarjetaId },
       order: { fecha_cierre: 'ASC' },
     });
-
-    // Fechas: 1ª = compra; resto +1m, +2m, ...
-    const fechas = this.generarFechasCuotas(fechaCompra, cantidad);
 
     // Prorrateo exacto en centavos (distribuye el resto en las primeras cuotas)
     const totalCent = Math.round(Number(montoTotal) * 100);
@@ -83,17 +79,10 @@ export class CuotaService {
     for (let i = 0; i < cantidad; i++) {
       const f = fechas[i];
 
-      // EC por fecha de **cada cuota** - crear si no existe
+      // EC por fecha de **cada cuota** - ahora debería existir
       let ec = this.estadoParaFecha(f, estados);
       if (!ec) {
-        // Crear el estado automáticamente si no existe
-        ec = await this.estadoCuentaService.ensureEstadoParaMes(manager, tarjeta, f);
-        // Refrescar la lista de estados después de crear uno nuevo
-        const estadosActualizados = await manager.getRepository(EstadoCuenta).find({
-          where: { tarjeta_id: tarjetaId },
-          order: { fecha_cierre: 'ASC' },
-        });
-        ec = this.estadoParaFecha(f, estadosActualizados) || ec;
+        return ApiResponseBuilder.error(400, `No hay estado de cuenta para la cuota #${i + 1} (esto no debería pasar)`);
       }
 
       if (ec.estado === 'cerrado') {
@@ -101,11 +90,7 @@ export class CuotaService {
           return ApiResponseBuilder.error(400, `La cuota #${i + 1} cae en un estado cerrado`);
         }
         // en creación, mover al siguiente abierto
-        const estadosActualizados = await manager.getRepository(EstadoCuenta).find({
-          where: { tarjeta_id: tarjetaId },
-          order: { fecha_cierre: 'ASC' },
-        });
-        const siguienteEstado = this.siguienteAbierto(ec, estadosActualizados);
+        const siguienteEstado = this.siguienteAbierto(ec, estados);
         if (!siguienteEstado) {
           // Crear un nuevo estado abierto para el mes siguiente
           const fechaSiguiente = new Date(f);
