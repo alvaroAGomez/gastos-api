@@ -231,8 +231,10 @@ export class TarjetaCreditoService {
 
     const qb = this.tarjetaRepo
       .createQueryBuilder('tarjeta')
-      .where('tarjeta.usuario = :usuarioId', { usuarioId })
-      .andWhere('tarjeta.banco = :bancoId', { bancoId: dto.bancoId })
+      .innerJoin('tarjeta.usuario', 'usuario')
+      .innerJoin('tarjeta.banco', 'banco')
+      .where('usuario.id = :usuarioId', { usuarioId })
+      .andWhere('banco.id = :bancoId', { bancoId: dto.bancoId })
       .andWhere('LOWER(TRIM(tarjeta.nombre)) = :nombre', { nombre: nombreLower })
       .andWhere('tarjeta.ultimos4Digitos = :ultimos4', { ultimos4 });
 
@@ -251,16 +253,21 @@ export class TarjetaCreditoService {
     const mes = fecha.getMonth() + 1;
     const anio = fecha.getFullYear();
 
-    const result = await this.cuotaRepo
-      .createQueryBuilder('cuota')
-      .innerJoin('cuota.gasto', 'gasto')
-      .where('gasto.tarjeta_credito_id = :tarjetaId', { tarjetaId })
-      .andWhere('MONTH(cuota.fecha_vencimiento) = :mes', { mes })
-      .andWhere('YEAR(cuota.fecha_vencimiento) = :anio', { anio })
-      .select('SUM(cuota.monto_cuota)', 'total')
-      .getRawOne();
+    try {
+      const result = await this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .innerJoin('cuota.gasto', 'gasto')
+        .where('gasto.tarjeta_id = :tarjetaId', { tarjetaId })
+        .andWhere('MONTH(cuota.fecha_cuota) = :mes', { mes })
+        .andWhere('YEAR(cuota.fecha_cuota) = :anio', { anio })
+        .select('SUM(cuota.monto_cuota)', 'total')
+        .getRawOne();
 
-    return +(result?.total || 0);
+      return +(result?.total || 0);
+    } catch (error) {
+      console.log('Error al calcular gasto actual mensual:', error);
+      throw new Error('Error al calcular gasto actual mensual');
+    }
   }
 
   private async calcularConsumosPendientes(tarjetaId: number, fechaDesde: Date): Promise<number> {
@@ -268,9 +275,8 @@ export class TarjetaCreditoService {
     const result = await this.cuotaRepo
       .createQueryBuilder('cuota')
       .innerJoin('cuota.gasto', 'gasto')
-      .where('gasto.tarjeta_credito_id = :tarjetaId', { tarjetaId })
-      .andWhere('cuota.pagada = false')
-      .andWhere('cuota.fecha_vencimiento >= :limite', { limite: fechaLimite })
+      .where('gasto.tarjeta_id = :tarjetaId', { tarjetaId })
+      .andWhere('cuota.fecha_cuota >= :limite', { limite: fechaLimite })
       .select('SUM(cuota.monto_cuota)', 'total')
       .getRawOne();
 

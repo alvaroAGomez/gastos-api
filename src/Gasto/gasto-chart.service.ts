@@ -17,17 +17,17 @@ export class GastoChartService {
     const query = this.cuotaRepo
       .createQueryBuilder('cuota')
       .leftJoin('cuota.gasto', 'gasto')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
+      .where('gasto.usuario_id = :userId', { userId })
+      .andWhere('YEAR(cuota.fecha_cuota) = :year', { year });
 
-    if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
+    if (tarjetaId) query.andWhere('gasto.tarjeta_id = :tarjetaId', { tarjetaId });
 
     if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-      query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      query.andWhere('gasto.categoria_id IN (:...categorias)', { categorias });
     }
 
     const rows = await query
-      .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
+      .select(['MONTH(cuota.fecha_cuota) as mes', 'SUM(cuota.monto_cuota) as total'])
       .groupBy('mes')
       .orderBy('mes', 'ASC')
       .getRawMany();
@@ -62,18 +62,18 @@ export class GastoChartService {
       .createQueryBuilder('cuota')
       .leftJoin('cuota.gasto', 'gasto')
       .leftJoin('gasto.categoria', 'categoria')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
+      .where('gasto.usuario_id = :userId', { userId })
+      .andWhere('YEAR(cuota.fecha_cuota) = :year', { year });
 
-    if (month) query.andWhere('MONTH(cuota.fechaVencimiento) = :month', { month });
-    if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjetaId', { tarjetaId });
+    if (month) query.andWhere('MONTH(cuota.fecha_cuota) = :month', { month });
+    if (tarjetaId) query.andWhere('gasto.tarjeta_id = :tarjetaId', { tarjetaId });
 
     if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-      query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      query.andWhere('gasto.categoria_id IN (:...categorias)', { categorias });
     }
 
     const rows = await query
-      .select(['categoria.nombre as categoria', 'SUM(cuota.montoCuota) as total'])
+      .select(['categoria.nombre as categoria', 'SUM(cuota.monto_cuota) as total'])
       .groupBy('categoria.nombre')
       .orderBy('total', 'DESC')
       .getRawMany();
@@ -102,19 +102,19 @@ export class GastoChartService {
     const query = this.cuotaRepo
       .createQueryBuilder('cuota')
       .leftJoin('cuota.gasto', 'gasto')
-      .where('gasto.usuarioId = :userId', { userId })
-      .andWhere('YEAR(cuota.fechaVencimiento) = :year', { year });
+      .where('gasto.usuario_id = :userId', { userId })
+      .andWhere('YEAR(cuota.fecha_cuota) = :year', { year });
 
-    if (tarjetaId) query.andWhere('gasto.tarjetaCredito = :tarjeta', { tarjeta: tarjetaId });
+    if (tarjetaId) query.andWhere('gasto.tarjeta_id = :tarjeta', { tarjeta: tarjetaId });
 
     if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-      query.andWhere('gasto.categoria IN (:...categorias)', { categorias });
+      query.andWhere('gasto.categoria_id IN (:...categorias)', { categorias });
     } else if (categorias) {
-      query.andWhere('gasto.categoria = :categoria', { categoria: categorias });
+      query.andWhere('gasto.categoria_id = :categoria', { categoria: categorias });
     }
 
     const rows = await query
-      .select(['MONTH(cuota.fechaVencimiento) as mes', 'SUM(cuota.montoCuota) as total'])
+      .select(['MONTH(cuota.fecha_cuota) as mes', 'SUM(cuota.monto_cuota) as total'])
       .groupBy('mes')
       .orderBy('mes', 'ASC')
       .getRawMany();

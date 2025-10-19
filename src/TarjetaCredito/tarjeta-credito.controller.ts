@@ -30,18 +30,18 @@ export class TarjetaCreditoController {
     return this.service.obtenerTarjetasCredito(user.id);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Obtener una tarjeta de crédito por ID' })
-  @ApiResponse({ status: 200, type: TarjetaCreditoResponseDto })
-  getById(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
-    return this.service.getById(id, user.id);
-  }
-
   @Get('resumen')
   @ApiOperation({ summary: 'Obtener resumen de todas las tarjetas del usuario' })
   @ApiResponse({ status: 200, type: [TarjetaCreditoResumenDto] })
   obtenerResumenTarjetas(@CurrentUser() user: Usuario) {
     return this.service.obtenerResumenTarjetas(user.id);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener una tarjeta de crédito por ID' })
+  @ApiResponse({ status: 200, type: TarjetaCreditoResponseDto })
+  getById(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Usuario) {
+    return this.service.getById(id, user.id);
   }
 
   @Put(':id')
