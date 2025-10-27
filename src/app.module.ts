@@ -14,6 +14,7 @@ import { DebitoConfigModule } from './DebitoConfig/debito-config.module';
 import { CustomNamingStrategy } from './common/naming.strategy';
 import { EstadosModule } from './EstadoCuenta/estado-cuenta.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DashboardModule } from './Dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     DebitoConfigModule,
     EstadosModule,
     ScheduleModule.forRoot(),
+    DashboardModule,
   ],
   providers: [],
 })

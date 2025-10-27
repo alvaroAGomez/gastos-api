@@ -27,12 +27,12 @@ export class AuthService {
     try {
       const user = await this.usersService.findByEmail(loginDto.email);
       if (!user) {
-        return ApiResponseBuilder.error(401, 'Credenciales inválidas');
+        return ApiResponseBuilder.error(401, 'Credenciales inválidas', 'Credenciales inválidas');
       }
 
       const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
       if (!isPasswordValid) {
-        return ApiResponseBuilder.error(401, 'Credenciales inválidas');
+        return ApiResponseBuilder.error(401, 'Credenciales inválidas', 'Credenciales inválidas');
       }
 
       const token = this.generateToken(user);

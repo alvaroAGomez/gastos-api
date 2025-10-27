@@ -149,7 +149,12 @@ export class GastosService {
         debito_config_id: null,
       });
       const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
-
+      console.log('🔍 Creando plan de cuotas:', {
+        gastoId: gasto_id,
+        tarjetaId: dto.tarjetaId,
+        cantidad: dto.cuotas,
+        fechaCompra: dto.fechaCompra,
+      });
       // 3) delegar TODA la lógica de cuotas
 
       const respCuotas = await this.cuotaService.crearPlanParaGasto(m, {
@@ -161,6 +166,12 @@ export class GastosService {
         fechaCompra: new Date(dto.fechaCompra),
         modo: 'crear',
       });
+      console.log('🔍 Respuesta del CuotaService:', respCuotas);
+
+      if (!respCuotas.ok) {
+        console.error('❌ Error en CuotaService:', respCuotas.error);
+        return respCuotas; // ✅ Retorna el error del CuotaService
+      }
       try {
         return ApiResponseBuilder.success(
           { gastoId: gasto_id, cuotas: respCuotas.data.length },
