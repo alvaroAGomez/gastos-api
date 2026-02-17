@@ -7,6 +7,7 @@ import { CategoriaResponseDto } from './dto/categoria-response.dto';
 import { Usuario } from 'src/Usuario/usuario.entity';
 import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
 import { Categoria } from './categoria.entity';
+import { CategoriMapperHelper } from '../common/mappers/categoria.mapper';
 
 @Injectable()
 export class CategoriaService {
@@ -42,11 +43,7 @@ export class CategoriaService {
       });
 
       const saved = await this.categoriaRepository.save(categoria);
-      const response: CategoriaResponseDto = {
-        id: saved.id,
-        nombre: saved.nombre,
-        usuario_id: saved.usuario?.id || null,
-      };
+      const response = CategoriMapperHelper.mapToCategoriaResponseDto(saved);
 
       return ApiResponseBuilder.success(response, 'Categoría creada exitosamente');
     } catch (error) {
@@ -64,13 +61,7 @@ export class CategoriaService {
         })
         .getMany();
 
-      const response = categorias.map((cat) => ({
-        id: cat.id,
-        nombre: cat.nombre,
-        color_hex: cat.color_hex,
-        icono: cat.icono,
-        usuario_id: cat.usuario?.id || null,
-      }));
+      const response = CategoriMapperHelper.mapToCategoriaResponseDtos(categorias);
 
       return ApiResponseBuilder.success(response, 'Categorías obtenidas exitosamente');
     } catch (error) {
@@ -86,13 +77,7 @@ export class CategoriaService {
         .where('usuario.id = :usuario_id', { usuario_id: usuario.id })
         .getMany();
 
-      const response = categorias.map((cat) => ({
-        id: cat.id,
-        nombre: cat.nombre,
-        color_hex: cat.color_hex,
-        icono: cat.icono,
-        usuario_id: cat.usuario.id,
-      }));
+      const response = CategoriMapperHelper.mapToCategoriaResponseDtos(categorias);
 
       return ApiResponseBuilder.success(response, 'Categorías del usuario obtenidas exitosamente');
     } catch (error) {
@@ -107,13 +92,7 @@ export class CategoriaService {
         .where('categoria.es_global = true')
         .getMany();
 
-      const response = categorias.map((cat) => ({
-        id: cat.id,
-        nombre: cat.nombre,
-        color_hex: cat.color_hex,
-        icono: cat.icono,
-        usuario_id: null,
-      }));
+      const response = CategoriMapperHelper.mapToCategoriaResponseDtos(categorias);
 
       return ApiResponseBuilder.success(response, 'Categorías globales obtenidas exitosamente');
     } catch (error) {
@@ -136,11 +115,7 @@ export class CategoriaService {
         return ApiResponseBuilder.error(404, 'Categoría no encontrada');
       }
 
-      const response: CategoriaResponseDto = {
-        id: categoria.id,
-        nombre: categoria.nombre,
-        usuario_id: categoria.usuario?.id || null,
-      };
+      const response = CategoriMapperHelper.mapToCategoriaResponseDto(categoria);
 
       return ApiResponseBuilder.success(response, 'Categoría encontrada exitosamente');
     } catch (error) {
@@ -186,11 +161,7 @@ export class CategoriaService {
       }
 
       const saved = await this.categoriaRepository.save(categoria);
-      const response: CategoriaResponseDto = {
-        id: saved.id,
-        nombre: saved.nombre,
-        usuario_id: saved.usuario?.id || null,
-      };
+      const response = CategoriMapperHelper.mapToCategoriaResponseDto(saved);
 
       return ApiResponseBuilder.success(response, 'Categoría actualizada exitosamente');
     } catch (error) {

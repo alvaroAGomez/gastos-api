@@ -14,6 +14,8 @@ import { EstadoCuentaService } from 'src/EstadoCuenta/estado-cuenta.service';
 import { FiltroGastosDashboardDto } from './dto/gasto-dashboard-filtro.dto';
 import { FiltroGastosCompletosDto } from './dto/gasto-filtro-completo.dto';
 import { TipoGasto } from './enums/tipo-gasto.enum';
+import { parsearFechaLocal } from 'src/common/utils/cuota.util';
+import { GastoMapperHelper } from 'src/common/mappers/gasto.mapper';
 
 export { TipoGasto };
 export type Moneda = 'ARS' | 'USD';
@@ -56,7 +58,7 @@ export class GastosService {
   private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
-      const fecha = new Date(dto.fechaCompra);
+      const fecha = parsearFechaLocal(dto.fechaCompra);
 
       // Resolver estado para la fecha
       const ec = await this.resolverEstadoParaFecha(m, tarjeta, fecha);
@@ -98,7 +100,7 @@ export class GastosService {
   private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
-      const fechaCompra = new Date(dto.fechaCompra);
+      const fechaCompra = parsearFechaLocal(dto.fechaCompra);
 
       // Resolver estado para la fecha
       const ecCompra = await this.resolverEstadoParaFecha(m, tarjeta, fechaCompra);
@@ -125,7 +127,7 @@ export class GastosService {
         moneda: dto.moneda,
         montoTotal: dto.monto,
         cantidad: dto.cuotas!,
-        fechaCompra: new Date(dto.fechaCompra),
+        fechaCompra: fechaCompra,
         modo: 'crear',
       });
 
@@ -145,7 +147,7 @@ export class GastosService {
   private async createGastoDebito(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
-      const fecha = new Date(dto.fechaCompra);
+      const fecha = parsearFechaLocal(dto.fechaCompra);
 
       // Resolver estado para la fecha
       const ec = await this.resolverEstadoParaFecha(m, tarjeta, fecha);
@@ -158,7 +160,7 @@ export class GastosService {
         descripcion: dto.descripcion,
         monto: dto.monto,
         moneda: dto.moneda,
-        fechaSuscripcion: new Date(dto.fechaCompra),
+        fechaSuscripcion: fecha,
       });
 
       if (!configResponse.ok) {
@@ -174,7 +176,7 @@ export class GastosService {
         descripcion: dto.descripcion ?? 'Débito automático',
         monto: dto.monto,
         moneda: dto.moneda,
-        fecha_compra: new Date(dto.fechaCompra),
+        fecha_compra: fecha,
         es_debito_auto: true,
         debito_config_id: configResponse.data.configId,
       });
@@ -310,30 +312,8 @@ export class GastosService {
 
       const gastos = await qb.getMany();
 
-      // Mapear a DTO
-      const gastosDto = gastos.map((gasto) => ({
-        id: gasto.id,
-        fecha: this.formatearFecha(gasto.fecha_compra),
-        descripcion: gasto.descripcion,
-        monto: Number(gasto.monto),
-        moneda: gasto.moneda,
-        categoria: {
-          id: gasto.categoria.id,
-          nombre: gasto.categoria.nombre,
-          color_hex: gasto.categoria.color_hex,
-          icono: gasto.categoria.icono,
-        },
-        tarjeta: {
-          id: gasto.tarjeta.id,
-          nombre: gasto.tarjeta.nombre,
-          banco: {
-            id: gasto.tarjeta.banco.id,
-            nombre: gasto.tarjeta.banco.nombre,
-          },
-        },
-        totalCuotas: gasto.cuotas?.length || 1,
-        esDebitoAuto: gasto.es_debito_auto,
-      }));
+      // Mapear a DTO usando helper
+      const gastosDto = GastoMapperHelper.mapToGastoDashboard(gastos);
 
       return ApiResponseBuilder.success(
         {
@@ -436,41 +416,8 @@ export class GastosService {
         return acc;
       }, {});
 
-      // Mapear a DTO
-      const gastosDto = cuotas.map((cuota) => {
-        const fechaCuota = cuota.fecha_cuota instanceof Date ? cuota.fecha_cuota : new Date(cuota.fecha_cuota);
-        const totalCuotas = cuotasMap[cuota.gasto.id] || 1;
-
-        let descripcion = cuota.gasto.descripcion || '';
-        if (totalCuotas > 1) {
-          descripcion += ` (${cuota.numero}/${totalCuotas})`;
-        }
-
-        return {
-          id: cuota.id,
-          gastoId: cuota.gasto.id,
-          fecha: fechaCuota.toISOString().split('T')[0],
-          descripcion: descripcion,
-          categoria: {
-            id: cuota.gasto.categoria.id,
-            nombre: cuota.gasto.categoria.nombre,
-            color_hex: cuota.gasto.categoria.color_hex,
-            icono: cuota.gasto.categoria.icono,
-          },
-          monto: Number(cuota.monto_cuota),
-          montoTotal: Number(cuota.gasto.monto),
-          moneda: cuota.moneda,
-          tarjeta: {
-            id: cuota.gasto.tarjeta.id,
-            nombre: cuota.gasto.tarjeta.nombre,
-            banco: cuota.gasto.tarjeta.banco.nombre,
-          },
-          tipo: 'Crédito',
-          totalCuotas: totalCuotas > 1 ? totalCuotas : undefined,
-          cuotaActual: cuota.numero,
-          esDebitoAuto: cuota.gasto.es_debito_auto,
-        };
-      });
+      // Mapear a DTO usando helper
+      const gastosDto = GastoMapperHelper.mapToGastoCompleto(cuotas, cuotasMap);
 
       const totalPages = Math.ceil(total / limit);
 

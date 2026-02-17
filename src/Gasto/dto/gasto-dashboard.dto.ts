@@ -37,6 +37,9 @@ export class GastoDashboardDto {
   @ApiProperty()
   totalCuotas?: number;
 
+  @ApiProperty({ description: 'Cuota actual en el que va (ej: 3 si está en la 3era cuota mientras que total es 12)' })
+  cuotaActual?: number;
+
   @ApiProperty()
   esDebitoAuto: boolean;
 }

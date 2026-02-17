@@ -15,6 +15,7 @@ import { CustomNamingStrategy } from './common/naming.strategy';
 import { EstadosModule } from './EstadoCuenta/estado-cuenta.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DashboardModule } from './Dashboard/dashboard.module';
+import { ReportesModule } from './Reportes/reportes.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { DashboardModule } from './Dashboard/dashboard.module';
     EstadosModule,
     ScheduleModule.forRoot(),
     DashboardModule,
+    ReportesModule,
   ],
   providers: [],
 })

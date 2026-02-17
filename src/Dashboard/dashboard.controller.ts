@@ -19,4 +19,11 @@ export class DashboardController {
   async getResumenFinanciero(@CurrentUser() user: Usuario) {
     return await this.dashboardService.getResumenFinanciero(user.id);
   }
+
+  @Get('tarjetas')
+  @ApiOperation({ summary: 'Obtener resumen detallado de todas las tarjetas del usuario' })
+  @ApiResponse({ status: 200 })
+  async getResumenTarjetas(@CurrentUser() user: Usuario) {
+    return await this.dashboardService.getResumenTarjetasDetallado(user.id);
+  }
 }

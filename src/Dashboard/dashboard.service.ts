@@ -8,6 +8,7 @@ import { EstadoCuenta } from 'src/EstadoCuenta/estado-cuenta.entity';
 import { ResumenFinancieroDto } from './dto/resumen-financiero.dto';
 import { ApiResponse } from 'src/common/response/api-response.builder';
 import { TarjetaCreditoService } from 'src/TarjetaCredito/tarjeta-credito.service';
+import { TarjetaCreditoDetalleDashboardDto } from 'src/TarjetaCredito/dto/tarjeta-credito-detalle-dashboard.dto';
 import { TarjetaCreditoResumenDto } from 'src/TarjetaCredito/dto/tarjeta-credito-resumen.dto';
 
 @Injectable()
@@ -50,6 +51,50 @@ export class DashboardService {
         status: 500,
         data: null,
         message: 'Error al obtener el resumen financiero',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Obtiene el resumen detallado de todas las tarjetas del usuario
+   * Utilizado por el dashboard para mostrar todas las tarjetas con limite y gastos
+   */
+  async getResumenTarjetasDetallado(
+    usuarioId: number
+  ): Promise<
+    ApiResponse<{ tarjetas: TarjetaCreditoDetalleDashboardDto[]; totalLimiteDisponible: number; totalLimite: number }>
+  > {
+    try {
+      const tarjetas = await this.tarjetaRepo.find({
+        where: { usuario: { id: usuarioId } },
+        order: { nombre: 'ASC' },
+      });
+
+      const detalles = await Promise.all(
+        tarjetas.map((t) => this.tarjetaCreditoService.calcularResumenTarjetaDetallado(t.id, usuarioId))
+      );
+
+      const totalLimiteDisponible = detalles.reduce((sum, t) => sum + Number(t.limiteDisponible), 0);
+      const totalLimite = detalles.reduce((sum, t) => sum + Number(t.limiteTotal), 0);
+
+      return {
+        ok: true,
+        status: 200,
+        data: {
+          tarjetas: detalles,
+          totalLimiteDisponible,
+          totalLimite,
+        },
+        message: 'Resumen de tarjetas obtenido exitosamente',
+      };
+    } catch (error) {
+      console.error('Error al obtener resumen de tarjetas detallado:', error);
+      return {
+        ok: false,
+        status: 500,
+        data: null,
+        message: 'Error al obtener el resumen de tarjetas',
         error: error.message,
       };
     }

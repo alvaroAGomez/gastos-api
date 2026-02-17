@@ -7,10 +7,14 @@ import { Usuario } from '../Usuario/usuario.entity';
 import { Banco } from '../Banco/banco.entity';
 import { UpdateTarjetaCreditoDto } from './dto/update-tarjeta-credito.dto';
 import { TarjetaCreditoResumenDto } from './dto/tarjeta-credito-resumen.dto';
+import { TarjetaCreditoDetalleDashboardDto } from './dto/tarjeta-credito-detalle-dashboard.dto';
+import { CuotasPendientesResponseDto } from './dto/cuota-pendiente.dto';
+import { Proyeccion12MesesResponseDto } from './dto/proyeccion-12-meses.dto';
 import { Cuota } from '../Cuota/cuota.entity';
 import { Gasto } from '../Gasto/gasto.entity';
 import { ApiResponseBuilder } from 'src/common/response/api-response.builder';
 import { EstadoCuentaService } from 'src/EstadoCuenta/estado-cuenta.service';
+import { TarjetaCreditoMapperHelper } from 'src/common/mappers/tarjeta-credito.mapper';
 
 @Injectable()
 export class TarjetaCreditoService {
@@ -167,6 +171,39 @@ export class TarjetaCreditoService {
     }
   }
 
+  /**
+   * Calcula el resumen detallado de una tarjeta específica (genérico, reutilizable)
+   * Utilizado tanto por Dashboard como por el detalle individual de la tarjeta
+   */
+  async calcularResumenTarjetaDetallado(
+    tarjetaId: number,
+    usuarioId: number
+  ): Promise<TarjetaCreditoDetalleDashboardDto> {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(tarjetaId, usuarioId);
+      const ahora = new Date();
+
+      // Gastos del mes actual (cuotas que vencen este mes)
+      const gastosEsteMes = await this.calcularGastoActualMensual(tarjetaId, ahora);
+
+      // Gastos futuros (cuotas para los próximos meses)
+      const gastosFuturos = await this.calcularConsumosPendientes(tarjetaId, ahora);
+
+      // Use mapper helper to transform into DTO
+      return TarjetaCreditoMapperHelper.mapToDetalleDashboard(
+        tarjeta,
+        gastosEsteMes,
+        gastosFuturos,
+      );
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error al calcular resumen detallado de tarjeta:', error);
+      throw new Error('Error al calcular el resumen de la tarjeta');
+    }
+  }
+
   async updateTarjetaCredito(id: number, dto: UpdateTarjetaCreditoDto, usuarioId: number) {
     try {
       const tarjeta = await this.buscarTarjetaPorId(id, usuarioId);
@@ -281,5 +318,79 @@ export class TarjetaCreditoService {
       .getRawOne();
 
     return +(result?.total || 0);
+  }
+
+  /**
+   * Obtiene todas las cuotas pendientes de los gastos en cuotas
+   */
+  async obtenerCuotasPendientes(
+    tarjetaId: number,
+    usuarioId: number
+  ): Promise<CuotasPendientesResponseDto> {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(tarjetaId, usuarioId);
+      const ahora = new Date();
+
+      // Obtener todos los gastos en cuotas (con más de 1 cuota)
+      const gastos = await this.gastoRepo
+        .createQueryBuilder('gasto')
+        .innerJoinAndSelect('gasto.cuotas', 'cuotas')
+        .innerJoinAndSelect('gasto.categoria', 'categoria')
+        .where('gasto.tarjeta_id = :tarjetaId', { tarjetaId })
+        .getMany();
+
+      // Use mapper helper to transform into response DTO
+      return TarjetaCreditoMapperHelper.mapToCuotasPendientes(gastos, ahora);
+    } catch (error) {
+      console.error('Error al obtener cuotas pendientes:', error);
+      throw new Error('Error al obtener las cuotas pendientes');
+    }
+  }
+
+  /**
+   * Obtiene la proyección de gastos para los próximos 12 meses
+   */
+  async obtenerProyeccion12Meses(
+    tarjetaId: number,
+    usuarioId: number
+  ): Promise<Proyeccion12MesesResponseDto> {
+    try {
+      const tarjeta = await this.buscarTarjetaPorId(tarjetaId, usuarioId);
+      const ahora = new Date();
+
+      // Obtener todos los gastos con cuotas
+      const gastos = await this.gastoRepo
+        .createQueryBuilder('gasto')
+        .leftJoinAndSelect('gasto.cuotas', 'cuotas')
+        .where('gasto.tarjeta_id = :tarjetaId', { tarjetaId })
+        .getMany();
+
+      // Obtener débitos automáticos activos
+      const debitos = await this.ds.getRepository('DebitoConfig').find({
+        where: {
+          tarjeta_id: tarjetaId,
+          activo: true,
+        },
+      });
+
+      // Use mapper helper to transform into response DTO
+      return TarjetaCreditoMapperHelper.mapToProyeccion12Meses(gastos, debitos, ahora);
+    } catch (error) {
+      console.error('Error al obtener proyección de 12 meses:', error);
+      throw new Error('Error al obtener la proyección de gastos');
+    }
+  }
+
+  /**
+   * Convierte una fecha en formato YYYY-MM a nombre del mes en español
+   */
+  private obtenerNombreMes(mesStr: string): string {
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    const [, mes] = mesStr.split('-');
+    const mesIndex = parseInt(mes) - 1;
+    return meses[mesIndex] || mesStr;
   }
 }
