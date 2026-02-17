@@ -13,9 +13,10 @@ import { CuotaService } from 'src/Cuota/cuota.service';
 import { EstadoCuentaService } from 'src/EstadoCuenta/estado-cuenta.service';
 import { FiltroGastosDashboardDto } from './dto/gasto-dashboard-filtro.dto';
 import { FiltroGastosCompletosDto } from './dto/gasto-filtro-completo.dto';
+import { TipoGasto } from './enums/tipo-gasto.enum';
 
+export { TipoGasto };
 export type Moneda = 'ARS' | 'USD';
-export type TipoGasto = 'normal' | 'cuotas' | 'debito';
 
 @Injectable()
 export class GastosService {
@@ -34,8 +35,8 @@ export class GastosService {
 
   async createGasto(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     try {
-      if (dto.tipo === 'debito') return this.createGastoDebito(dto);
-      if (dto.tipo === 'cuotas') {
+      if (dto.tipo === TipoGasto.DEBITO) return this.createGastoDebito(dto);
+      if (dto.tipo === TipoGasto.CUOTAS) {
         if (!dto.cuotas || dto.cuotas < 2) {
           return ApiResponseBuilder.error(400, 'Para cuotas, "cuotas" >= 2');
         }

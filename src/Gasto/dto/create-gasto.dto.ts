@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, IsEnum } from 'class-validator';
+import { TipoGasto } from '../enums/tipo-gasto.enum';
 
 export type Moneda = 'ARS' | 'USD';
-export type TipoGasto = 'normal' | 'cuotas' | 'debito';
 
 export class CreateGastoDto {
   @ApiProperty({ example: 1, description: 'ID del usuario que crea el gasto' })
@@ -39,11 +39,12 @@ export class CreateGastoDto {
   @IsString()
   fechaCompra!: string;
 
-  @ApiProperty({ enum: ['normal', 'cuotas', 'debito'], description: 'Tipo de gasto' })
+  @ApiProperty({ enum: TipoGasto, example: 1, description: 'Tipo de gasto: 1=Normal, 2=Cuotas, 3=Débito' })
   @IsNotEmpty()
+  @IsEnum(TipoGasto)
   tipo!: TipoGasto;
 
-  @ApiPropertyOptional({ example: 3, description: 'Número de cuotas (solo si tipo="cuotas")' })
+  @ApiPropertyOptional({ example: 3, description: 'Número de cuotas (solo si tipo=2 Cuotas)' })
   @IsOptional()
   @IsNumber()
   cuotas?: number;
