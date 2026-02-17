@@ -34,15 +34,15 @@ async function bootstrap() {
     .addTag('Auth')
     .addTag('Banco')
     .addTag('Categorías')
-    .addTag('Cuota')
+    //.addTag('Cuota')
     .addTag('Gastos')
     .addTag('Tarjeta Crédito')
-    .addTag('Tarjeta Débito')
+    //.addTag('Tarjeta Débito')
     //.addTag('Usuario')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/', app, document);
+  SwaggerModule.setup('swagger', app, document);
 
   await app.listen(port);
   console.log(`🚀 App corriendo en http://localhost:${port}`);

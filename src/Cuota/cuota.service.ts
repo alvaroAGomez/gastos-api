@@ -1,5 +1,5 @@
 // src/modules/Cuota/cuota.service.ts
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Cuota } from './cuota.entity';
@@ -15,12 +15,17 @@ interface CrearPlanParams {
   gastoId: number;
   tarjetaId: number;
   moneda: Moneda | string;
-  montoTotal: number; // total del gasto (se prorratea)
-  cantidad: number; // n cuotas (>= 1). Si tu regla es “cuotas” => >=2, validalo arriba.
-  fechaCompra: Date; // 1ª cuota usa esta fecha
-  numeroInicial?: number; // default 1
+  montoTotal: number;
+  cantidad: number;
+  fechaCompra: Date;
+  numeroInicial?: number;
   modo?: 'crear' | 'editar';
   forzar?: boolean;
+}
+
+interface MontoProrratado {
+  baseCent: number;
+  resto: number;
 }
 
 @Injectable()
@@ -34,100 +39,58 @@ export class CuotaService {
   ) {}
 
   public async crearPlanParaGasto(manager: EntityManager, params: CrearPlanParams): Promise<ApiResponse<Cuota[]>> {
-    const {
-      gastoId,
-      tarjetaId,
-      moneda,
-      montoTotal,
-      cantidad,
-      fechaCompra,
-      numeroInicial = 1,
-      modo = 'crear',
-      forzar = false,
-    } = params;
+    // Validación
+    const validationError = this.validarParametros(params);
+    if (validationError) return validationError;
 
-    if (!cantidad || cantidad < 1) {
-      return ApiResponseBuilder.error(400, 'La cantidad de cuotas debe ser >= 1');
-    }
+    // Obtener tarjeta
+    const tarjeta = await this.obtenerTarjeta(manager, params.tarjetaId);
+    if (!tarjeta.ok) return tarjeta.response;
 
-    // Obtener la tarjeta para poder crear estados automáticamente
-    const tarjeta = await manager.getRepository(TarjetaCredito).findOne({
-      where: { id: tarjetaId },
-    });
-    if (!tarjeta) {
-      return ApiResponseBuilder.error(404, 'Tarjeta no encontrada');
-    }
+    // Generar fechas y asegurar estados
+    const fechas = this.generarFechasCuotas(params.fechaCompra, params.cantidad);
+    await this.estadoCuentaService.ensureEstadosParaFechas(manager, tarjeta.data, fechas);
 
-    // Fechas: 1ª = compra; resto +1m, +2m, ...
-    const fechas = this.generarFechasCuotas(fechaCompra, cantidad);
+    // Cargar estados
+    const estados = await this.cargarEstados(manager, params.tarjetaId);
 
-    // Asegurar estados para todas las fechas de una vez (más eficiente)
-    await this.estadoCuentaService.ensureEstadosParaFechas(manager, tarjeta, fechas);
+    // Calcular prorrateo
+    const montos = this.calcularMontoProrratado(params.montoTotal, params.cantidad);
 
-    // Obtener estados actualizados después de crearlos
-    const estados = await manager.getRepository(EstadoCuenta).find({
-      where: { tarjeta_id: tarjetaId },
-      order: { fecha_cierre: 'ASC' },
-    });
-
-    // Prorrateo exacto en centavos (distribuye el resto en las primeras cuotas)
-    const totalCent = Math.round(Number(montoTotal) * 100);
-    const baseCent = Math.floor(totalCent / cantidad);
-    const resto = totalCent % cantidad;
-
+    // Crear cuotas
     const cuotas: Cuota[] = [];
-    for (let i = 0; i < cantidad; i++) {
-      const f = fechas[i];
+    for (let i = 0; i < params.cantidad; i++) {
+      const ec = await this.resolverEstadoParaCuota(
+        manager,
+        fechas[i],
+        estados,
+        tarjeta.data,
+        params.tarjetaId,
+        params.modo || 'crear',
+        params.forzar || false,
+        i
+      );
 
-      // EC por fecha de **cada cuota** - ahora debería existir
-      let ec = this.estadoParaFecha(f, estados);
-      if (!ec) {
-        return ApiResponseBuilder.error(400, `No hay estado de cuenta para la cuota #${i + 1} (esto no debería pasar)`);
-      }
+      if (!ec.ok) return ec.response;
 
-      if (ec.estado === 'cerrado') {
-        if (modo === 'editar' && !forzar) {
-          return ApiResponseBuilder.error(400, `La cuota #${i + 1} cae en un estado cerrado`);
-        }
-        // en creación, mover al siguiente abierto
-        const siguienteEstado = this.siguienteAbierto(ec, estados);
-        if (!siguienteEstado) {
-          // Crear un nuevo estado abierto para el mes siguiente
-          const fechaSiguiente = new Date(f);
-          fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
-          ec = await this.estadoCuentaService.ensureEstadoParaMes(manager, tarjeta, fechaSiguiente);
-        } else {
-          ec = siguienteEstado;
-        }
-      }
-
-      const montoCent = baseCent + (i < resto ? 1 : 0);
-      const montoCuota = montoCent / 100;
-
+      const montoCuota = this.calcularMontoCuota(i, montos);
       cuotas.push(
-        this.cuotaRepo.create({
-          gasto_id: gastoId,
-          estado_id: ec.id,
-          numero: numeroInicial + i,
-          fecha_cuota: f,
-          monto_cuota: montoCuota,
-          moneda: moneda as Moneda,
-        })
+        this.crearCuota(
+          params.gastoId,
+          ec.data,
+          params.numeroInicial || 1,
+          i,
+          fechas[i],
+          montoCuota,
+          params.moneda as Moneda
+        )
       );
     }
 
-    try {
-      const saved = await manager.save(Cuota, cuotas);
-      return ApiResponseBuilder.success(saved, `Se crearon ${saved.length} cuota(s) para el gasto ${gastoId}`);
-    } catch (error: any) {
-      return ApiResponseBuilder.error(500, `Error al crear cuotas: ${error.message}`);
-    }
+    // Guardar cuotas
+    return this.guardarCuotas(manager, cuotas, params.gastoId);
   }
 
-  /**
-   * WRAPPER DE COMPATIBILIDAD con tu firma anterior.
-   * Ahora ignora 'estados' y 'ecCompra' recibidos y delega en crearPlanParaGasto.
-   */
   public async createCuotasForGasto(
     manager: EntityManager,
     params: {
@@ -136,12 +99,11 @@ export class CuotaService {
       montoTotal: number;
       cantidad: number;
       fechaCompra: Date;
-      estados?: EstadoCuenta[]; // ignorado
-      ecCompra?: EstadoCuenta; // ignorado
+      estados?: EstadoCuenta[];
+      ecCompra?: EstadoCuenta;
       numeroInicial?: number;
     }
   ): Promise<ApiResponse<Cuota[]>> {
-    // necesitamos tarjeta_id para buscar estados; lo traemos del gasto
     const gasto = await manager.getRepository(Gasto).findOne({ where: { id: params.gastoId } });
     if (!gasto) return ApiResponseBuilder.error(404, 'Gasto no encontrado');
 
@@ -157,19 +119,187 @@ export class CuotaService {
     });
   }
 
-  // ----------------- Helpers de asignación y fechas -----------------
+  // ===================== VALIDACIÓN =====================
 
-  /** Criterio de asignación por rango (inicio, fin] */
-  private estadoParaFecha(fecha: Date, estados: EstadoCuenta[]) {
+  private validarParametros(params: CrearPlanParams): ApiResponse<any> | null {
+    if (!params.cantidad || params.cantidad < 1) {
+      return ApiResponseBuilder.error(400, 'La cantidad de cuotas debe ser >= 1');
+    }
+    return null;
+  }
+
+  // ===================== INICIALIZACIÓN =====================
+
+  private async obtenerTarjeta(
+    manager: EntityManager,
+    tarjetaId: number
+  ): Promise<{ ok: boolean; data?: TarjetaCredito; response?: ApiResponse<any> }> {
+    const tarjeta = await manager.getRepository(TarjetaCredito).findOne({ where: { id: tarjetaId } });
+    if (!tarjeta) {
+      return { ok: false, response: ApiResponseBuilder.error(404, 'Tarjeta no encontrada') };
+    }
+    return { ok: true, data: tarjeta };
+  }
+
+  private async cargarEstados(manager: EntityManager, tarjetaId: number): Promise<EstadoCuenta[]> {
+    return manager.getRepository(EstadoCuenta).find({
+      where: { tarjeta_id: tarjetaId },
+      order: { inicio_periodo: 'ASC' },
+    });
+  }
+
+  // ===================== CÁLCULOS =====================
+
+  private calcularMontoProrratado(montoTotal: number, cantidad: number): MontoProrratado {
+    const totalCent = Math.round(Number(montoTotal) * 100);
+    const baseCent = Math.floor(totalCent / cantidad);
+    const resto = totalCent % cantidad;
+    return { baseCent, resto };
+  }
+
+  private calcularMontoCuota(indice: number, montos: MontoProrratado): number {
+    const montoCent = montos.baseCent + (indice < montos.resto ? 1 : 0);
+    return montoCent / 100;
+  }
+
+  // ===================== RESOLUCIÓN DE ESTADOS =====================
+
+  private async resolverEstadoParaCuota(
+    manager: EntityManager,
+    fecha: Date,
+    estados: EstadoCuenta[],
+    tarjeta: TarjetaCredito,
+    tarjetaId: number,
+    modo: string,
+    forzar: boolean,
+    indice: number
+  ): Promise<{ ok: boolean; data?: EstadoCuenta; response?: ApiResponse<any> }> {
+    // Intentar encontrar estado para la fecha
+    let ec = this.buscarEstadoEnMemoria(fecha, estados);
+
+    if (!ec) {
+      // Si no encuentra, buscar por contexto (antigua o futura)
+      const esOld = new Date(fecha) < new Date();
+      ec = await this.buscarEstadoContextual(manager, fecha, estados, tarjetaId, esOld);
+    }
+
+    if (!ec) {
+      // Si aún no hay estado, crear uno nuevo
+      ec = await this.estadoCuentaService.ensureEstadoParaMes(manager, tarjeta, fecha);
+      this.actualizarEstadoEnLista(estados, ec);
+    }
+
+    // Si el estado está cerrado, resolver
+    if (ec.estado === 'cerrado') {
+      if (modo === 'editar' && !forzar) {
+        return {
+          ok: false,
+          response: ApiResponseBuilder.error(400, `La cuota #${indice + 1} cae en un estado cerrado`),
+        };
+      }
+
+      const ecResuelto = await this.resolverEstadoCerrado(manager, ec, fecha, estados, tarjeta);
+      if (!ecResuelto.ok) return ecResuelto;
+      ec = ecResuelto.data;
+    }
+
+    return { ok: true, data: ec };
+  }
+
+  private async buscarEstadoContextual(
+    manager: EntityManager,
+    fecha: Date,
+    estados: EstadoCuenta[],
+    tarjetaId: number,
+    esOld: boolean
+  ): Promise<EstadoCuenta | undefined> {
+    if (esOld) {
+      // Para fechas antiguas, buscar estado cerrado
+      let ec = this.buscarEstadoEnMemoria(fecha, estados, true);
+
+      if (!ec) {
+        // Consultar BD directamente
+        ec = await this.buscarEstadoEnBD(manager, tarjetaId, fecha);
+      }
+
+      if (!ec) {
+        // Buscar siguiente abierto
+        ec = this.obtenerSiguienteEstadoAbierto(fecha, estados);
+      }
+
+      return ec;
+    } else {
+      // Para fechas futuras, solo buscar abiertos
+      return this.obtenerSiguienteEstadoAbierto(fecha, estados);
+    }
+  }
+
+  private async resolverEstadoCerrado(
+    manager: EntityManager,
+    ec: EstadoCuenta,
+    fecha: Date,
+    estados: EstadoCuenta[],
+    tarjeta: TarjetaCredito
+  ): Promise<{ ok: boolean; data?: EstadoCuenta; response?: ApiResponse<any> }> {
+    const siguienteEstado = this.obtenerSiguienteEstadoAbiertoDesde(ec, estados);
+
+    if (!siguienteEstado) {
+      // Crear nuevo estado para el mes siguiente
+      const fechaSiguiente = new Date(fecha);
+      fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
+      const nuevoEstado = await this.estadoCuentaService.ensureEstadoParaMes(manager, tarjeta, fechaSiguiente);
+      this.actualizarEstadoEnLista(estados, nuevoEstado);
+      return { ok: true, data: nuevoEstado };
+    }
+
+    return { ok: true, data: siguienteEstado };
+  }
+
+  // ===================== BÚSQUEDA DE ESTADOS =====================
+
+  private buscarEstadoEnMemoria(
+    fecha: Date,
+    estados: EstadoCuenta[],
+    permitirCerrados: boolean = false
+  ): EstadoCuenta | undefined {
     for (const e of estados) {
-      const ini = new Date(e.inicio_periodo); // excluyente
-      const fin = new Date(e.fin_periodo); // incluyente
+      if (!permitirCerrados && e.estado === 'cerrado') continue;
+
+      const ini = new Date(e.inicio_periodo);
+      const fin = new Date(e.fin_periodo);
       if (fecha > ini && fecha <= fin) return e;
     }
     return undefined;
   }
 
-  private siguienteAbierto(actual: EstadoCuenta, estados: EstadoCuenta[]) {
+  private async buscarEstadoEnBD(
+    manager: EntityManager,
+    tarjetaId: number,
+    fecha: Date
+  ): Promise<EstadoCuenta | undefined> {
+    const todos = await manager.getRepository(EstadoCuenta).find({
+      where: { tarjeta_id: tarjetaId },
+      order: { inicio_periodo: 'ASC' },
+    });
+
+    for (const e of todos) {
+      const ini = new Date(e.inicio_periodo);
+      const fin = new Date(e.fin_periodo);
+      if (fecha > ini && fecha <= fin) return e;
+    }
+
+    return undefined;
+  }
+
+  private obtenerSiguienteEstadoAbierto(fecha: Date, estados: EstadoCuenta[]): EstadoCuenta | undefined {
+    const sorted = [...estados].sort((a, b) => new Date(a.fin_periodo).getTime() - new Date(b.fin_periodo).getTime());
+    for (const e of sorted) {
+      if (e.estado === 'abierto' && new Date(e.fin_periodo) > fecha) return e;
+    }
+    return undefined;
+  }
+
+  private obtenerSiguienteEstadoAbiertoDesde(actual: EstadoCuenta, estados: EstadoCuenta[]): EstadoCuenta | undefined {
     const idx = estados.findIndex((e) => e.id === actual.id);
     for (let i = idx + 1; i < estados.length; i++) {
       if (estados[i].estado !== 'cerrado') return estados[i];
@@ -177,11 +307,45 @@ export class CuotaService {
     return undefined;
   }
 
-  private failNoAbierto(): never {
-    throw new BadRequestException('No hay estado abierto posterior disponible');
+  // ===================== GESTIÓN DE LISTA DE ESTADOS =====================
+
+  private actualizarEstadoEnLista(estados: EstadoCuenta[], nuevoEstado: EstadoCuenta): void {
+    estados.push(nuevoEstado);
+    estados.sort((a, b) => new Date(a.fin_periodo).getTime() - new Date(b.fin_periodo).getTime());
   }
 
-  /** 1ª = fecha_compra; luego mismo día mes +1, +2… (clamp al último día) */
+  // ===================== CREACIÓN DE CUOTAS =====================
+
+  private crearCuota(
+    gastoId: number,
+    estado: EstadoCuenta,
+    numeroInicial: number,
+    indice: number,
+    fecha: Date,
+    monto: number,
+    moneda: Moneda
+  ): Cuota {
+    return this.cuotaRepo.create({
+      gasto_id: gastoId,
+      estado_id: estado.id,
+      numero: numeroInicial + indice,
+      fecha_cuota: fecha,
+      monto_cuota: monto,
+      moneda,
+    });
+  }
+
+  private async guardarCuotas(manager: EntityManager, cuotas: Cuota[], gastoId: number): Promise<ApiResponse<Cuota[]>> {
+    try {
+      const saved = await manager.save(Cuota, cuotas);
+      return ApiResponseBuilder.success(saved, `Se crearon ${saved.length} cuota(s) para el gasto ${gastoId}`);
+    } catch (error: any) {
+      return ApiResponseBuilder.error(500, `Error al crear cuotas: ${error.message}`);
+    }
+  }
+
+  // ===================== UTILIDADES DE FECHAS =====================
+
   private generarFechasCuotas(fechaCompra: Date, n: number): Date[] {
     const base = new Date(Date.UTC(fechaCompra.getUTCFullYear(), fechaCompra.getUTCMonth(), fechaCompra.getUTCDate()));
     const dia = base.getUTCDate();

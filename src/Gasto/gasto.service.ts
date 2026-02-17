@@ -1,11 +1,11 @@
 // src/modules/gastos/gastos.service.ts
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cuota } from 'src/Cuota/cuota.entity';
 import { EstadoCuenta } from 'src/EstadoCuenta/estado-cuenta.entity';
 import { DebitoConfigService } from 'src/DebitoConfig/debito-config.service';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Gasto } from './gasto.entity';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { ApiResponse, ApiResponseBuilder } from '../common/response/api-response.builder';
@@ -30,7 +30,8 @@ export class GastosService {
     private readonly estadoCuentaService: EstadoCuentaService
   ) {}
 
-  // ---------- Entrada única ----------
+  // ===================== PUNTO DE ENTRADA =====================
+
   async createGasto(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     try {
       if (dto.tipo === 'debito') return this.createGastoDebito(dto);
@@ -42,9 +43,6 @@ export class GastosService {
       }
       return this.createGastoNormal(dto);
     } catch (error) {
-      if (error instanceof BadRequestException) {
-        return ApiResponseBuilder.error(400, error.message);
-      }
       if (error instanceof NotFoundException) {
         return ApiResponseBuilder.error(404, error.message);
       }
@@ -52,32 +50,17 @@ export class GastosService {
     }
   }
 
+  // ===================== CREACIÓN - GASTO NORMAL =====================
+
   private async createGastoNormal(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
-
       const fecha = new Date(dto.fechaCompra);
 
-      // 1) Asegurar el estado del mes de la compra (on-demand)
-      const ecCreado = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fecha);
+      // Resolver estado para la fecha
+      const ec = await this.resolverEstadoParaFecha(m, tarjeta, fecha);
 
-      // 2) Refrescar estados y resolver EC
-      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
-      let ec = this.estadoParaFecha(fecha, estados) || ecCreado;
-
-      if (ec.estado === 'cerrado') {
-        const siguienteEstado = this.siguienteAbierto(ec, estados);
-        if (!siguienteEstado) {
-          // Crear un nuevo estado abierto para el mes siguiente
-          const fechaSiguiente = new Date(fecha);
-          fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
-          ec = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaSiguiente);
-        } else {
-          ec = siguienteEstado;
-        }
-      }
-
-      // 3) Crear gasto
+      // Crear gasto
       const gasto = this.gastoRepo.create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
@@ -92,16 +75,13 @@ export class GastosService {
       });
       const { id: gasto_id } = await m.save(gasto);
 
-      // 4) Delegar creación de 1 cuota
+      // Crear 1 cuota
       const respCuotas = await this.cuotaService.createCuotasForGasto(m, {
         gastoId: gasto_id,
         moneda: dto.moneda,
         montoTotal: dto.monto,
         cantidad: 1,
         fechaCompra: fecha,
-        estados,
-        ecCompra: ec,
-        numeroInicial: 1,
       });
       if (!respCuotas.ok) return respCuotas;
 
@@ -112,30 +92,17 @@ export class GastosService {
     });
   }
 
+  // ===================== CREACIÓN - GASTO EN CUOTAS =====================
+
   private async createGastoCuotas(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
-      // 1) validar usuario/tarjeta y crear EC si no existe
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const fechaCompra = new Date(dto.fechaCompra);
 
-      // Asegurar el estado del mes de la compra
-      const ecCreado = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaCompra);
+      // Resolver estado para la fecha
+      const ecCompra = await this.resolverEstadoParaFecha(m, tarjeta, fechaCompra);
 
-      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
-      let ecCompra = this.estadoParaFecha(fechaCompra, estados) || ecCreado;
-
-      if (ecCompra.estado === 'cerrado') {
-        const siguienteEstado = this.siguienteAbierto(ecCompra, estados);
-        if (!siguienteEstado) {
-          const fechaSiguiente = new Date(fechaCompra);
-          fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
-          ecCompra = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaSiguiente);
-        } else {
-          ecCompra = siguienteEstado;
-        }
-      }
-
-      // 2) crear el gasto “madre” (solo valida datos del gasto)
+      // Crear gasto "madre"
       const gasto = m.getRepository(Gasto).create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
@@ -149,14 +116,8 @@ export class GastosService {
         debito_config_id: null,
       });
       const { id: gasto_id } = await m.getRepository(Gasto).save(gasto);
-      console.log('🔍 Creando plan de cuotas:', {
-        gastoId: gasto_id,
-        tarjetaId: dto.tarjetaId,
-        cantidad: dto.cuotas,
-        fechaCompra: dto.fechaCompra,
-      });
-      // 3) delegar TODA la lógica de cuotas
 
+      // Delegar lógica de cuotas
       const respCuotas = await this.cuotaService.crearPlanParaGasto(m, {
         gastoId: gasto_id,
         tarjetaId: dto.tarjetaId,
@@ -166,46 +127,29 @@ export class GastosService {
         fechaCompra: new Date(dto.fechaCompra),
         modo: 'crear',
       });
-      console.log('🔍 Respuesta del CuotaService:', respCuotas);
 
       if (!respCuotas.ok) {
-        console.error('❌ Error en CuotaService:', respCuotas.error);
-        return respCuotas; // ✅ Retorna el error del CuotaService
+        return respCuotas;
       }
-      try {
-        return ApiResponseBuilder.success(
-          { gastoId: gasto_id, cuotas: respCuotas.data.length },
-          'Gasto en cuotas creado exitosamente'
-        );
-      } catch (error) {
-        return ApiResponseBuilder.error(400, 'Error al crear cuotas:' + error.message);
-      }
+
+      return ApiResponseBuilder.success(
+        { gastoId: gasto_id, cuotas: respCuotas.data.length },
+        'Gasto en cuotas creado exitosamente'
+      );
     });
   }
+
+  // ===================== CREACIÓN - GASTO DÉBITO =====================
 
   private async createGastoDebito(dto: CreateGastoDto): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const tarjeta = await this.findTarjetaDelUsuario(m, dto.tarjetaId, dto.usuarioId);
       const fecha = new Date(dto.fechaCompra);
 
-      // Asegurar el estado del mes de la compra
-      const ecCreado = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fecha);
+      // Resolver estado para la fecha
+      const ec = await this.resolverEstadoParaFecha(m, tarjeta, fecha);
 
-      const estados = await this.findEstadosOrdenados(m, tarjeta.id);
-      let ec = this.estadoParaFecha(fecha, estados) || ecCreado;
-
-      if (ec.estado === 'cerrado') {
-        const siguienteEstado = this.siguienteAbierto(ec, estados);
-        if (!siguienteEstado) {
-          const fechaSiguiente = new Date(fecha);
-          fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
-          ec = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaSiguiente);
-        } else {
-          ec = siguienteEstado;
-        }
-      }
-
-      // 1. Crear la configuración de débito
+      // Crear configuración de débito
       const configResponse = await this.debitoConfigService.createDebitoConfig({
         usuarioId: dto.usuarioId,
         tarjetaId: dto.tarjetaId,
@@ -220,7 +164,7 @@ export class GastosService {
         return configResponse;
       }
 
-      // 2. Crear el gasto asociado a la config
+      // Crear gasto asociado a la config
       const gasto = this.gastoRepo.create({
         usuario_id: dto.usuarioId,
         tarjeta_id: dto.tarjetaId,
@@ -246,7 +190,8 @@ export class GastosService {
     });
   }
 
-  /** Usado por el scheduler: crea el gasto del mes desde la configuración */
+  // ===================== CREACIÓN - GASTO DESDE CONFIG (Scheduler) =====================
+
   async createGastoFromDebitoConfig(debitoConfigId: number, fechaOpcional?: string): Promise<ApiResponse<any>> {
     return this.ds.transaction(async (m) => {
       const dc = await this.debitoConfigService.getActiveConfig(debitoConfigId);
@@ -254,7 +199,7 @@ export class GastosService {
         return ApiResponseBuilder.error(404, 'Configuración de débito no encontrada o inactiva');
       }
 
-      // Fecha = día de la suscripción en el mes actual (o en la fecha que pases)
+      // Calcular fecha: día de suscripción en el mes actual
       const base = fechaOpcional ? new Date(fechaOpcional) : new Date();
       const y = base.getUTCFullYear();
       const mo = base.getUTCMonth();
@@ -263,29 +208,16 @@ export class GastosService {
       const dia = Math.min(diaBase, last);
       const fechaCompra = new Date(Date.UTC(y, mo, dia));
 
-      // Obtener la tarjeta para ensureEstadoParaMes
+      // Obtener tarjeta
       const tarjeta = await this.tarjetaRepo.findOne({ where: { id: dc.tarjeta_id } });
       if (!tarjeta) {
         return ApiResponseBuilder.error(404, 'Tarjeta no encontrada');
       }
 
-      // Asegurar el estado del mes de la compra
-      const ecCreado = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaCompra);
+      // Resolver estado para la fecha
+      const ec = await this.resolverEstadoParaFecha(m, tarjeta, fechaCompra);
 
-      const estados = await this.findEstadosOrdenados(m, dc.tarjeta_id);
-      let ec = this.estadoParaFecha(fechaCompra, estados) || ecCreado;
-
-      if (ec.estado === 'cerrado') {
-        const siguienteEstado = this.siguienteAbierto(ec, estados);
-        if (!siguienteEstado) {
-          const fechaSiguiente = new Date(fechaCompra);
-          fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
-          ec = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaSiguiente);
-        } else {
-          ec = siguienteEstado;
-        }
-      }
-
+      // Crear gasto
       const gasto = this.gastoRepo.create({
         usuario_id: dc.usuario_id,
         tarjeta_id: dc.tarjeta_id,
@@ -314,64 +246,35 @@ export class GastosService {
     });
   }
 
-  // ---------- helpers ----------
-  private async findTarjetaDelUsuario(m: any, tarjetaId: number, usuarioId: number) {
-    const tarjeta = await this.tarjetaRepo.findOne({
-      where: { id: tarjetaId },
-      relations: ['usuario'],
-    });
-    if (!tarjeta || (tarjeta.usuario as any)?.id !== usuarioId) {
-      throw new NotFoundException('Tarjeta no encontrada o no pertenece al usuario');
-    }
-    return tarjeta;
-  }
+  // ===================== RESOLUCIÓN DE ESTADOS =====================
 
-  private async findEstadosOrdenados(m: any, tarjetaId: number) {
-    return this.estadoRepo.find({
-      where: { tarjeta_id: tarjetaId },
-      order: { fecha_cierre: 'ASC' },
-    });
-  }
+  private async resolverEstadoParaFecha(m: EntityManager, tarjeta: TarjetaCredito, fecha: Date): Promise<EstadoCuenta> {
+    // Asegurar ec del mes de la fecha
+    const ecCreado = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fecha);
 
-  /** Criterio de asignación por rango (inicio, fin] */
-  private estadoParaFecha(fecha: Date, estados: EstadoCuenta[]) {
-    for (const e of estados) {
-      const ini = new Date(e.inicio_periodo); // excluyente
-      const fin = new Date(e.fin_periodo); // incluyente
-      if (fecha > ini && fecha <= fin) return e;
-    }
-    return undefined;
-  }
-  private siguienteAbierto(actual: EstadoCuenta, estados: EstadoCuenta[]) {
-    const idx = estados.findIndex((e) => e.id === actual.id);
-    for (let i = idx + 1; i < estados.length; i++) if (estados[i].estado !== 'cerrado') return estados[i];
-    return undefined;
-  }
-  private failNoAbierto(): never {
-    throw new BadRequestException('No hay estado abierto posterior disponible');
-  }
+    // Cargar todos los estados de la tarjeta
+    const estados = await this.findEstadosOrdenados(m, tarjeta.id);
 
-  // Helper para convertir fecha de manera segura
-  private formatearFecha(fecha: any): string {
-    try {
-      if (!fecha) return '';
+    // Buscar estado que coincida con la fecha
+    let ec = this.estadoParaFecha(fecha, estados) || ecCreado;
 
-      if (fecha instanceof Date) {
-        return fecha.toISOString().split('T')[0];
+    // Si el estado está cerrado, resolver
+    if (ec.estado === 'cerrado') {
+      const siguienteEstado = this.siguienteAbierto(ec, estados);
+      if (!siguienteEstado) {
+        // Crear nuevo estado para el mes siguiente
+        const fechaSiguiente = new Date(fecha);
+        fechaSiguiente.setMonth(fechaSiguiente.getMonth() + 1);
+        ec = await this.estadoCuentaService.ensureEstadoParaMes(m, tarjeta, fechaSiguiente);
+      } else {
+        ec = siguienteEstado;
       }
-
-      // Si es string, convertir a Date primero
-      if (typeof fecha === 'string') {
-        return new Date(fecha).toISOString().split('T')[0];
-      }
-
-      // Si no es ni Date ni string, intentar conversión
-      return new Date(fecha).toISOString().split('T')[0];
-    } catch (error) {
-      console.error('Error al formatear fecha:', fecha, error);
-      return '';
     }
+
+    return ec;
   }
+
+  // ===================== CONSULTAS - DASHBOARD =====================
 
   async getGastosDashboard(usuarioId: number, filtros: FiltroGastosDashboardDto) {
     try {
@@ -406,7 +309,7 @@ export class GastosService {
 
       const gastos = await qb.getMany();
 
-      // Mapear a DTO usando el helper
+      // Mapear a DTO
       const gastosDto = gastos.map((gasto) => ({
         id: gasto.id,
         fecha: this.formatearFecha(gasto.fecha_compra),
@@ -443,12 +346,11 @@ export class GastosService {
         'Gastos del dashboard obtenidos exitosamente'
       );
     } catch (error) {
-      console.error('Error al obtener gastos del dashboard:', error);
       return ApiResponseBuilder.error(500, 'Error al obtener los gastos del dashboard');
     }
   }
 
-  // ...existing code...
+  // ===================== CONSULTAS - GASTOS COMPLETOS =====================
 
   async getGastosCompletos(usuarioId: number, filtros: FiltroGastosCompletosDto) {
     try {
@@ -461,7 +363,7 @@ export class GastosService {
         .innerJoinAndSelect('tarjeta.banco', 'banco')
         .where('gasto.usuario_id = :usuarioId', { usuarioId });
 
-      // Filtros de fecha basados en la fecha de la CUOTA, no del gasto
+      // Filtros de fecha basados en la fecha de la CUOTA
       if (filtros.mes) {
         const [año, mes] = filtros.mes.split('-');
         const fechaDesde = `${año}-${mes}-01`;
@@ -489,7 +391,7 @@ export class GastosService {
         qb.andWhere('gasto.categoria_id = :categoriaId', { categoriaId: filtros.categoriaId });
       }
 
-      // Ordenamiento basado en fecha de cuota
+      // Ordenamiento
       const orderBy = filtros.orderBy || 'fecha';
       const orderDirection = filtros.orderDirection || 'DESC';
 
@@ -512,16 +414,13 @@ export class GastosService {
       const limit = filtros.limit || 20;
       const skip = (page - 1) * limit;
 
-      // Obtener total para paginación
       const totalQuery = qb.clone();
       const total = await totalQuery.getCount();
 
-      // Aplicar paginación
       qb.skip(skip).take(limit);
-
       const cuotas = await qb.getMany();
 
-      // Para obtener el total de cuotas de cada gasto, necesitamos hacer una consulta adicional
+      // Obtener total de cuotas por gasto
       const gastosIds = [...new Set(cuotas.map((cuota) => cuota.gasto.id))];
       const cuotasPorGasto = await this.cuotaRepo
         .createQueryBuilder('cuota')
@@ -536,20 +435,19 @@ export class GastosService {
         return acc;
       }, {});
 
-      // Mapear a DTO - cada cuota individual
+      // Mapear a DTO
       const gastosDto = cuotas.map((cuota) => {
         const fechaCuota = cuota.fecha_cuota instanceof Date ? cuota.fecha_cuota : new Date(cuota.fecha_cuota);
         const totalCuotas = cuotasMap[cuota.gasto.id] || 1;
 
-        // Generar descripción con info de cuota
         let descripcion = cuota.gasto.descripcion || '';
         if (totalCuotas > 1) {
           descripcion += ` (${cuota.numero}/${totalCuotas})`;
         }
 
         return {
-          id: cuota.id, // ID de la cuota, no del gasto
-          gastoId: cuota.gasto.id, // ID del gasto padre
+          id: cuota.id,
+          gastoId: cuota.gasto.id,
           fecha: fechaCuota.toISOString().split('T')[0],
           descripcion: descripcion,
           categoria: {
@@ -558,8 +456,8 @@ export class GastosService {
             color_hex: cuota.gasto.categoria.color_hex,
             icono: cuota.gasto.categoria.icono,
           },
-          monto: Number(cuota.monto_cuota), // Monto de la cuota individual
-          montoTotal: Number(cuota.gasto.monto), // Monto total del gasto
+          monto: Number(cuota.monto_cuota),
+          montoTotal: Number(cuota.gasto.monto),
           moneda: cuota.moneda,
           tarjeta: {
             id: cuota.gasto.tarjeta.id,
@@ -568,7 +466,7 @@ export class GastosService {
           },
           tipo: 'Crédito',
           totalCuotas: totalCuotas > 1 ? totalCuotas : undefined,
-          cuotaActual: cuota.numero, // Número de esta cuota específica
+          cuotaActual: cuota.numero,
           esDebitoAuto: cuota.gasto.es_debito_auto,
         };
       });
@@ -577,7 +475,7 @@ export class GastosService {
 
       return ApiResponseBuilder.success(
         {
-          gastos: gastosDto, // En realidad son cuotas individuales
+          gastos: gastosDto,
           pagination: {
             page,
             limit,
@@ -595,8 +493,60 @@ export class GastosService {
         'Gastos obtenidos exitosamente'
       );
     } catch (error) {
-      console.error('Error al obtener gastos completos:', error);
       return ApiResponseBuilder.error(500, 'Error al obtener los gastos');
+    }
+  }
+
+  // ===================== HELPERS =====================
+
+  private async findTarjetaDelUsuario(m: any, tarjetaId: number, usuarioId: number) {
+    const tarjeta = await this.tarjetaRepo.findOne({
+      where: { id: tarjetaId },
+      relations: ['usuario'],
+    });
+    if (!tarjeta || (tarjeta.usuario as any)?.id !== usuarioId) {
+      throw new NotFoundException('Tarjeta no encontrada o no pertenece al usuario');
+    }
+    return tarjeta;
+  }
+
+  private async findEstadosOrdenados(m: any, tarjetaId: number) {
+    return this.estadoRepo.find({
+      where: { tarjeta_id: tarjetaId },
+      order: { fecha_cierre: 'ASC' },
+    });
+  }
+
+  private estadoParaFecha(fecha: Date, estados: EstadoCuenta[]) {
+    for (const e of estados) {
+      const ini = new Date(e.inicio_periodo);
+      const fin = new Date(e.fin_periodo);
+      if (fecha > ini && fecha <= fin) return e;
+    }
+    return undefined;
+  }
+
+  private siguienteAbierto(actual: EstadoCuenta, estados: EstadoCuenta[]) {
+    const idx = estados.findIndex((e) => e.id === actual.id);
+    for (let i = idx + 1; i < estados.length; i++) if (estados[i].estado !== 'cerrado') return estados[i];
+    return undefined;
+  }
+
+  private formatearFecha(fecha: any): string {
+    try {
+      if (!fecha) return '';
+
+      if (fecha instanceof Date) {
+        return fecha.toISOString().split('T')[0];
+      }
+
+      if (typeof fecha === 'string') {
+        return new Date(fecha).toISOString().split('T')[0];
+      }
+
+      return new Date(fecha).toISOString().split('T')[0];
+    } catch (error) {
+      return '';
     }
   }
 }

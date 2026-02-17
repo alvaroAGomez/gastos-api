@@ -53,8 +53,31 @@ export class EstadoCuentaService {
 
     if (ec) return ec;
 
+    // Verificar si la fecha cae dentro del estado calculado
+    const fechaCae = fechaRef > inicio_periodo && fechaRef <= fin_periodo;
+
+    if (!fechaCae) {
+      // La fecha NO cae dentro del estado calculado, intentar con el siguiente mes
+      const siguienteMes = new Date(Date.UTC(y, m0 + 1, 1));
+      return this.ensureEstadoParaMes(m, tarjeta, siguienteMes, feriados, politica, vencimientoMesSiguiente);
+    }
+
     // Si no existe ningún estado que cubra esta fecha, crear uno nuevo
     const hoy = new Date();
+
+    // IMPORTANTE: Verificar si ya existe un estado con ese mismo rango de fechas
+    // (puede haber duplicados con diferentes IDs)
+    const yaExiste = await repo
+      .createQueryBuilder('ec')
+      .where('ec.tarjeta_id = :tarjetaId', { tarjetaId: tarjeta.id })
+      .andWhere('ec.inicio_periodo = :inicio', { inicio: inicio_periodo })
+      .andWhere('ec.fin_periodo = :fin', { fin: fin_periodo })
+      .getOne();
+
+    if (yaExiste) {
+      return yaExiste;
+    }
+
     ec = repo.create({
       tarjeta_id: tarjeta.id,
       inicio_periodo,
