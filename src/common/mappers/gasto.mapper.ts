@@ -7,42 +7,75 @@ import { Cuota } from 'src/Cuota/cuota.entity';
  */
 export class GastoMapperHelper {
   /**
-   * Transform Gasto array into GastoDashboardDto array
+   * Transform Cuota array into GastoDashboardDto array
    * Used in getGastosDashboard()
-   * Calculates cuota actual based on vencidas count
+   * Uses fecha_cuota (not fecha_compra) and monto_cuota (not full monto)
+   * so installments from prior months correctly appear in the current period
    */
-  static mapToGastoDashboard(gastos: Gasto[]): any[] {
-    return gastos.map((gasto) => {
-      // Calcular cuota actual: contar cuotas que ya vencieron (fecha_cuota <= hoy)
-      const ahora = new Date();
-      const cuotasVencidas = gasto.cuotas?.filter((c) => new Date(c.fecha_cuota) <= ahora).length || 0;
-      const cuotaActual = Math.min(cuotasVencidas + 1, gasto.cuotas?.length || 1);
+  static mapToGastoDashboard(cuotas: Cuota[], cuotasMap: { [gastoId: number]: number }): any[] {
+    return cuotas.map((cuota) => {
+      const totalCuotas = cuotasMap[cuota.gasto.id] || 1;
+      const esCuotas = totalCuotas > 1;
 
       return {
-        id: gasto.id,
-        fecha: this.formatearFecha(gasto.fecha_compra),
-        descripcion: gasto.descripcion,
-        monto: Number(gasto.monto),
-        moneda: gasto.moneda,
+        id: cuota.gasto.id,
+        cuotaId: cuota.id,
+        fecha: this.formatearFecha(cuota.fecha_cuota),
+        fechaCompra: this.formatearFecha(cuota.gasto.fecha_compra),
+        descripcion: cuota.gasto.descripcion,
+        monto: Number(cuota.monto_cuota),
+        montoTotal: esCuotas ? Number(cuota.gasto.monto) : undefined,
+        moneda: cuota.moneda,
         categoria: {
-          id: gasto.categoria.id,
-          nombre: gasto.categoria.nombre,
-          color_hex: gasto.categoria.color_hex,
-          icono: gasto.categoria.icono,
+          id: cuota.gasto.categoria.id,
+          nombre: cuota.gasto.categoria.nombre,
+          color_hex: cuota.gasto.categoria.color_hex,
+          icono: cuota.gasto.categoria.icono,
         },
         tarjeta: {
-          id: gasto.tarjeta.id,
-          nombre: gasto.tarjeta.nombre,
+          id: cuota.gasto.tarjeta.id,
+          nombre: cuota.gasto.tarjeta.nombre,
           banco: {
-            id: gasto.tarjeta.banco.id,
-            nombre: gasto.tarjeta.banco.nombre,
+            id: cuota.gasto.tarjeta.banco.id,
+            nombre: cuota.gasto.tarjeta.banco.nombre,
           },
         },
-        totalCuotas: gasto.cuotas?.length || 1,
-        cuotaActual: gasto.cuotas && gasto.cuotas.length > 1 ? cuotaActual : undefined,
-        esDebitoAuto: gasto.es_debito_auto,
+        totalCuotas: esCuotas ? totalCuotas : undefined,
+        cuotaActual: esCuotas ? cuota.numero : undefined,
+        esDebitoAuto: cuota.gasto.es_debito_auto,
       };
     });
+  }
+
+  /**
+   * Fallback: map Gasto[] (without cuotas) to dashboard format
+   * Used for legacy debito gastos created before the cuota-creation fix
+   */
+  static mapGastoSinCuotaToDashboard(gastos: Gasto[]): any[] {
+    return gastos.map((gasto) => ({
+      id: gasto.id,
+      cuotaId: undefined,
+      fecha: this.formatearFecha(gasto.fecha_compra),
+      fechaCompra: this.formatearFecha(gasto.fecha_compra),
+      descripcion: gasto.descripcion,
+      monto: Number(gasto.monto),
+      moneda: gasto.moneda,
+      categoria: {
+        id: gasto.categoria.id,
+        nombre: gasto.categoria.nombre,
+        color_hex: gasto.categoria.color_hex,
+        icono: gasto.categoria.icono,
+      },
+      tarjeta: {
+        id: gasto.tarjeta.id,
+        nombre: gasto.tarjeta.nombre,
+        banco: {
+          id: gasto.tarjeta.banco.id,
+          nombre: gasto.tarjeta.banco.nombre,
+        },
+      },
+      esDebitoAuto: gasto.es_debito_auto,
+    }));
   }
 
   /**

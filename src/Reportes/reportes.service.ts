@@ -5,7 +5,6 @@ import { Gasto } from 'src/Gasto/gasto.entity';
 import { TarjetaCredito } from 'src/TarjetaCredito/tarjeta-credito.entity';
 import { Categoria } from 'src/Categoria/categoria.entity';
 import { Cuota } from 'src/Cuota/cuota.entity';
-import { MESES } from 'src/common/constants/meses.const';
 import { TipoGasto } from 'src/Gasto/enums/tipo-gasto.enum';
 import { GraficoTortaDto } from './dto/grafico-torta.dto';
 import { GraficoBarrasDto } from './dto/grafico-barras.dto';
@@ -99,12 +98,7 @@ export class ReportesService {
     const cuotasPendientes = await cuotasPendientesQuery.getMany();
 
     // Use mapper helper to transform into Chart.js format
-    return ReportesMapperHelper.mapToActualVsFuturo(
-      gastosActuales,
-      cuotasPendientes,
-      cantidadMeses,
-      year,
-    );
+    return ReportesMapperHelper.mapToActualVsFuturo(gastosActuales, cuotasPendientes, cantidadMeses, year);
   }
 
   /**

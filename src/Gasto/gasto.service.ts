@@ -182,6 +182,16 @@ export class GastosService {
       });
       const { id } = await m.save(gasto);
 
+      // Crear cuota para que aparezca en el dashboard (fecha_cuota = fecha de suscripción)
+      const respCuotas = await this.cuotaService.createCuotasForGasto(m, {
+        gastoId: id,
+        moneda: dto.moneda,
+        montoTotal: dto.monto,
+        cantidad: 1,
+        fechaCompra: fecha,
+      });
+      if (!respCuotas.ok) return respCuotas;
+
       return ApiResponseBuilder.success(
         {
           gastoId: id,
@@ -236,6 +246,16 @@ export class GastosService {
 
       try {
         const { id } = await m.save(gasto);
+
+        // Crear cuota para que aparezca en el dashboard mensual
+        await this.cuotaService.createCuotasForGasto(m, {
+          gastoId: id,
+          moneda: dc.moneda,
+          montoTotal: Number(dc.monto),
+          cantidad: 1,
+          fechaCompra: fechaCompra,
+        });
+
         return ApiResponseBuilder.success(
           { gastoId: id, estadoId: ec.id },
           'Gasto por débito automático creado exitosamente'
@@ -281,7 +301,6 @@ export class GastosService {
 
   async getGastosDashboard(usuarioId: number, filtros: FiltroGastosDashboardDto) {
     try {
-      // Calcular fechas del mes actual si no se proporcionan
       const ahora = new Date();
       const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
       const ultimoDiaMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
@@ -289,15 +308,17 @@ export class GastosService {
       const fechaDesde = filtros.fechaDesde || primerDiaMes.toISOString().split('T')[0];
       const fechaHasta = filtros.fechaHasta || ultimoDiaMes.toISOString().split('T')[0];
 
-      const qb = this.gastoRepo
-        .createQueryBuilder('gasto')
+      // Filtrar por fecha_cuota para incluir cuotas de compras anteriores
+      // que impactan en el período y gastos recurrentes del período
+      const qb = this.cuotaRepo
+        .createQueryBuilder('cuota')
+        .innerJoinAndSelect('cuota.gasto', 'gasto')
         .innerJoinAndSelect('gasto.categoria', 'categoria')
         .innerJoinAndSelect('gasto.tarjeta', 'tarjeta')
         .innerJoinAndSelect('tarjeta.banco', 'banco')
-        .leftJoinAndSelect('gasto.cuotas', 'cuotas')
         .where('gasto.usuario_id = :usuarioId', { usuarioId })
-        .andWhere('gasto.fecha_compra >= :fechaDesde', { fechaDesde })
-        .andWhere('gasto.fecha_compra <= :fechaHasta', { fechaHasta });
+        .andWhere('cuota.fecha_cuota >= :fechaDesde', { fechaDesde })
+        .andWhere('cuota.fecha_cuota <= :fechaHasta', { fechaHasta });
 
       if (filtros.tarjetaId) {
         qb.andWhere('gasto.tarjeta_id = :tarjetaId', { tarjetaId: filtros.tarjetaId });
@@ -308,16 +329,56 @@ export class GastosService {
       }
 
       const limit = filtros.limit || 10;
-      qb.orderBy('gasto.fecha_compra', 'DESC').addOrderBy('gasto.id', 'DESC').take(limit);
+      qb.orderBy('cuota.fecha_cuota', 'DESC').addOrderBy('cuota.id', 'DESC').take(limit);
 
-      const gastos = await qb.getMany();
+      const cuotas = await qb.getMany();
 
-      // Mapear a DTO usando helper
-      const gastosDto = GastoMapperHelper.mapToGastoDashboard(gastos);
+      // Obtener total de cuotas por gasto para mostrar X/Y en installments
+      let cuotasMap: { [gastoId: number]: number } = {};
+      const gastosIds = [...new Set(cuotas.map((c) => c.gasto.id))];
+      if (gastosIds.length > 0) {
+        const totales = await this.cuotaRepo
+          .createQueryBuilder('cuota')
+          .select('cuota.gasto_id', 'gastoId')
+          .addSelect('COUNT(*)', 'totalCuotas')
+          .where('cuota.gasto_id IN (:...gastosIds)', { gastosIds })
+          .groupBy('cuota.gasto_id')
+          .getRawMany();
+
+        cuotasMap = totales.reduce((acc, item) => {
+          acc[item.gastoId] = parseInt(item.totalCuotas);
+          return acc;
+        }, {});
+      }
+
+      const gastosDto = GastoMapperHelper.mapToGastoDashboard(cuotas, cuotasMap);
+
+      // Fallback: gastos sin cuotas en el período (datos legacy antes del fix)
+      // Excluir gastos que ya están representados por cuotas
+      const cuotaGastoIds = new Set(cuotas.map((c) => c.gasto.id));
+      const gastosLegacy = await this.gastoRepo
+        .createQueryBuilder('gasto')
+        .innerJoinAndSelect('gasto.categoria', 'categoria')
+        .innerJoinAndSelect('gasto.tarjeta', 'tarjeta')
+        .innerJoinAndSelect('tarjeta.banco', 'banco')
+        .leftJoin('gasto.cuotas', 'cuota_check')
+        .where('gasto.usuario_id = :usuarioId', { usuarioId })
+        .andWhere('gasto.fecha_compra >= :fechaDesde', { fechaDesde })
+        .andWhere('gasto.fecha_compra <= :fechaHasta', { fechaHasta })
+        .andWhere('cuota_check.id IS NULL')
+        .getMany();
+
+      const gastosLegacyDto = GastoMapperHelper.mapGastoSinCuotaToDashboard(
+        gastosLegacy.filter((g) => !cuotaGastoIds.has(g.id))
+      );
+
+      const todosLosGastos = [...gastosDto, ...gastosLegacyDto]
+        .sort((a, b) => b.fecha.localeCompare(a.fecha))
+        .slice(0, limit);
 
       return ApiResponseBuilder.success(
         {
-          gastos: gastosDto,
+          gastos: todosLosGastos,
           periodo: {
             desde: fechaDesde,
             hasta: fechaHasta,
@@ -354,12 +415,39 @@ export class GastosService {
         qb.andWhere('cuota.fecha_cuota >= :fechaDesde', { fechaDesde }).andWhere('cuota.fecha_cuota <= :fechaHasta', {
           fechaHasta,
         });
-      } else {
+      } else if (filtros.fechaDesde || filtros.fechaHasta) {
         if (filtros.fechaDesde) {
           qb.andWhere('cuota.fecha_cuota >= :fechaDesde', { fechaDesde: filtros.fechaDesde });
         }
         if (filtros.fechaHasta) {
           qb.andWhere('cuota.fecha_cuota <= :fechaHasta', { fechaHasta: filtros.fechaHasta });
+        }
+      } else {
+        // Sin filtros: usar el período del resumen activo del usuario (que contiene hoy)
+        const hoy = new Date().toISOString().split('T')[0];
+        const estadosAbiertos = await this.estadoRepo
+          .createQueryBuilder('ec')
+          .innerJoin('ec.tarjeta', 'tarjeta')
+          .where('tarjeta.usuario_id = :usuarioId', { usuarioId })
+          .andWhere('ec.estado = :estado', { estado: 'abierto' })
+          .andWhere('ec.inicio_periodo <= :hoy', { hoy })
+          .andWhere('ec.fin_periodo >= :hoy', { hoy })
+          .getMany();
+
+        if (estadosAbiertos.length > 0) {
+          const inicios = estadosAbiertos.map((e) => new Date(e.inicio_periodo).getTime());
+          const fines = estadosAbiertos.map((e) => new Date(e.fin_periodo).getTime());
+          const fechaDesde = new Date(Math.min(...inicios)).toISOString().split('T')[0];
+          const fechaHasta = new Date(Math.max(...fines)).toISOString().split('T')[0];
+          qb.andWhere('cuota.fecha_cuota >= :fechaDesde', { fechaDesde });
+          qb.andWhere('cuota.fecha_cuota <= :fechaHasta', { fechaHasta });
+        } else {
+          // Fallback: mes calendario actual
+          const ahora = new Date();
+          const fechaDesde = new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString().split('T')[0];
+          const fechaHasta = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).toISOString().split('T')[0];
+          qb.andWhere('cuota.fecha_cuota >= :fechaDesde', { fechaDesde });
+          qb.andWhere('cuota.fecha_cuota <= :fechaHasta', { fechaHasta });
         }
       }
 
